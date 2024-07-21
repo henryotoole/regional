@@ -1,0 +1,712 @@
+// src/regions/reg_sw.js
+// Josh Reed 2024
+//
+// Contains the switchyard region class.
+
+import {Region, DataHandler, css_inject, css_format_as_rule, Clipboard, RHElement} from "../regional.js"
+import {DispatchClientJS} from "../../../lib/dispatch.js"
+
+/**
+ * The switchyard is the toplevel region and the general manager of the entire application. It acts as the
+ * focal point between all regional data access and the server as well.
+ * 
+ * The general method for instantiating all regions from the switchyard down is as follows:
+ * 1. Instantiate the Switchyard
+ * >	construct(), fab(), link(), load()
+ */
+class RegionSwitchyard extends Region
+{
+	/**
+	 * Instantiate a new Switchyard region. A webapp should have only one instance of this for a page at
+	 * a time.
+	 * 
+	 * The creation process for a Switchyard region is similar to any region, but with an extra step:
+	 * 1. Instantiate, which does nothing but setup memory
+	 * 2. Fabricate, which will often do nothing as for all but the smallest applications it makes more
+	 *    sense to break the visuals of the page into at least one layer of regions below the switchyard.
+	 * 3. Link, which is a little different from a subregion as there's no super-region for a switchyard.
+	 *    Literal linking-into-DOM is also optional. See link()'s description for more info.
+	 * 4. Load, which kicks of a chain of loading operations to pull down data, setup dispatch, etc.
+	 * 
+	 * It's good practice to extend this constructor in a child class to setup type definitions for subregions
+	 * and datahandlers. See example site. TODO
+	 */
+	constructor()
+	{
+		super()
+
+		// State data internal to the Switchyard
+		/** @type {Boolean} Whether or not the app is currently in the 'loading' stage of creation. */
+		this._loading = false
+		
+
+
+		// Configurations which effect how the switchyard loads submodules and machinery
+		/** @description Configuration object for regional */
+		this.config = {
+			/** @description The base z-index of an ethereal region (overlay) */
+			z_index_eth_base: 100,
+		}
+		/** @description Configuration object for dispatch */
+		this.dispatch_config = {
+			/** @description The domain to point Dispatch requests at. Defaults to page domain. */
+			domain: window.location.origin,
+			/** @description The route that dispatch aims at. The default is /_dispatch. */
+			route: '/_dispatch',
+			/** @description The 'namespace' that this regional application operates under */
+			namespace: "js",
+			verbose: 1,
+			/**
+			 * @description Whether or not to load functions from server, increasing load times but improving
+			 * syntax for backend calls.
+			 * */
+			load_functions: 0
+		}
+		/** @description Data used to keep track of region internal 'focus' */
+		this._focus_settings = {
+			/** @description The currently in-focus region. can be undefined. */
+			region: undefined,
+			/** @description A timestamp used to prevent focus propagation. */
+			timestamp: undefined
+		}
+		/** @description Used to keep track of procedural ID generation. */
+		this._id_gen_map = {}
+		/** @description Used to keep a list of functions to call on load */
+		this._call_on_load = []
+
+		// Run any 'instant' setup functions
+		this._css_setup()
+		this._setup_key_events()
+
+		// REFACTOR LINE
+
+		this.clipboard = new Clipboard(this) // Semi-refactored
+		document.addEventListener("click", (e)=>{this.clipboard.deselect()})
+
+		// Setup drag dataspot. Used by component class
+		// TODO refactor dragdata once I've got a webpage running
+		this._dragdata = {component: undefined}
+		// TODO refactor anchors... eventually.
+		this._registered_anchors = {} // See _register_anchor_location()
+		window.addEventListener("hashchange", (e)=>{this._anchor_on_hash_change(1)})
+		this._anchors_ignore_next = 0 // See _anchor_on_hash_change()
+		this._anchor_hash_on_load = document.location.hash.replace('#','')
+		this.anchors_disable = 0 // Set this to true in child constructor to disable anchor behavior.
+	}
+
+	/**
+	 * Linking for a Switchyard is substantially different from regular regions. The link method
+	 * is entirely overridden and performs only a subset of actions. Furthermore, it's not a requirement
+	 * to actually have linking element in the DOM. A Switchyard can be 'DOMless' with no literal
+	 * DOM connection, if so desired.
+	 * 
+	 * Linking operations for the switchyard includes:
+	 * + Link this region to the specific element in webpage DOM that it represents.
+	 * + Assign a unique in-memory ID for this region and set the $reg_el's ID to the same.
+	 * + Fabrication links (if fab() was called earlier), including links to this.$element and linking $elements
+	 *   to the $reg_el.
+	 * 
+	 * @param {HTMLElement} $reg_el The DOM element for the switchyard, or undefined to leave it 'DOMless'
+	 * 
+	 * @returns {Region} itself for function call chaining
+	 */
+	link($reg_el)
+	{
+		if($reg_el === undefined)
+		{
+			// Create an element that we will not attach to the DOM.
+			$reg_el = document.createElement("div")
+		}
+
+		this.$reg = $reg_el
+		this.$reg.setAttribute('rfm_reg', this.constructor.name)
+
+		// Helpful for operations where we don't wish to distinguish between region and switchyard.
+		this.swyd = this
+
+		// Assign a unique in-memory ID for this region and set the $reg_el's ID to the same.
+		this._link_ids()
+
+		// Fabrication links (if fab() was called earlier), including links to this.$element and linking $elements
+		// to the $reg_el.
+		this._link_fabricate()
+
+		// Call post hook for subclass extension, if implemented.
+		this._on_link_post()
+		// Create subregions
+		this._create_subregions()
+
+		return this
+	}
+
+	/**
+	 * This method is the primary data loader for the region structure. It will load the following in this order:
+	 * + Dispatch (which is instant unless configured to pull server methods)
+	 * > Setup datahandlers and regions
+	 * + Anything special, which would be defined in a subclass of RegionSwitchyard
+	 * + Datahandlers, which will be fully 
+	 * 
+	 * @returns {Promise} A promise that resolves when the app is fully loaded.
+	 */
+	load()
+	{
+		return new Promise((res, rej)=>
+		{
+			// Define a general-purpose rejection function that rejects the overall promise
+			// and calls an abstract method for failure-to-load.
+			let rej_and_report = (e)=>
+			{
+				this.on_load_failed(e)
+				rej(e)
+			}
+
+			this._loading = true
+			this._load_dispatch().then(()=>
+			{
+				this.on_loaded_dispatch()
+
+				this.setup_datahandlers()
+
+				return this._load_special()
+			}).catch(rej_and_report).then(()=>
+			{
+				this.on_loaded_specials()
+				return this._load_datahandlers()
+			}).catch(rej_and_report).then(()=>
+			{
+				this._loading = false
+				this.settings_refresh();
+				this.on_load_complete()
+				this._call_on_load.forEach((fn)=>(fn()))
+				this._anchor_on_hash_change(0)
+				this.graphical_render()
+
+				res()
+			})
+		})
+	}
+
+	/**
+	 * @returns {Boolean} True if this switchyard is asynchronously loading things and false otherwise
+	 */
+	is_loading() {return this._loading}
+
+	/**
+	 * Called to initiate the dispatch BACKEND for this app if one is used. Other backend-communication methods
+	 * can be easily added to the _load_special() for each app, but dispatch is so prevalent among regional
+	 * applications that a special function will exist for it here.
+	 * 
+	 * This function will resolve immediately unless dispatch has been configured to load functions.
+	 * 
+	 *  @returns {Promise} A promise which loads dispatch.
+	 */
+	_load_dispatch()
+	{
+		return new Promise((res, rej)=>
+		{
+			var csrf_token = this.token_get_csrf()
+			if(csrf_token == undefined)
+			{
+				rej(new Error(
+					"Cannot instantiate dispatch instance because app " + this.constructor.name + " does not \
+					define a token_get_csrf() method."))
+			}
+			this.dispatch = new DispatchClientJS(this.dispatch_config.domain, this.dispatch_config.route, this.dispatch_config.namespace)
+			this.dispatch.setup_csrf(csrf_token)
+			if(this.dispatch_config.load_functions)
+			{
+				this.dispatch.setup_backend_functions().then(res).catch(rej)
+			}
+			else
+			{
+				res()
+			}
+		})
+	}
+
+	/**
+	 * @abstract
+	 * Called to load any special resources which must exist before the regional structure can operate.
+	 * 
+	 * @returns {Promise} A promise which loads special resources.
+	 */
+	_load_special()
+	{
+		return new Promise((res, rej)=> {res()})
+	}
+
+	/**
+	 * Called to load all datahandlers. This will load them all concurrently. If some datahandlers need to be
+	 * loaded before others, this function will need to be overwritten in child app class.
+	 * 
+	 * @returns {Promise} A promise which loads the datahandlers.
+	 */
+	_load_datahandlers()
+	{
+		return DataHandler.data_refresh_multiple(this.datahandlers)
+	}
+
+	/**
+	 * @abstract
+	 * Called when dispatch is loaded.
+	 */
+	on_loaded_dispatch() {}
+
+	/**
+	 * @abstract
+	 * Called when all special resources are loaded
+	 */
+	on_loaded_specials() {}
+
+	/**
+	 * @abstract
+	 * Called at the end of the _load() process. All data is loaded and regions are setup.
+	 */
+	on_load_complete() {}
+
+	/**
+	 * @abstract
+	 * Called if, at any point, the load fails for some reason.
+	 * 
+	 * @param {Error} e The error that caused load failure.
+	 */
+	on_load_failed(e) {}
+
+	/**
+	 * Register a function to be executed when the loading stage is complete. This will fire after the
+	 * post-load settings_refresh() but before the post-load graphical_render().
+	 * 
+	 * @param {Function} fn A function that will execute with no arguments when the loading stage is complete.
+	 */
+	call_on_load(fn)
+	{
+		this._call_on_load.push(fn)
+	}
+
+	/**
+	 * @abstract
+	 * Overwrite in child class to register all datahandlers for this project
+	 */
+	setup_datahandlers() {}
+
+	/**
+	 * @magic
+	 * Inject the custom CSS classes used by regional. All of these start with 'rcss', which is a sort
+	 * of magic token I suppose which generally shouldn't be used for classnames to prevent overlap.
+	 * 
+	 * Prater code workday:
+	 * Pigeons coo from nearby tree;
+	 * Bumblebees drift by.
+	 */
+	_css_setup()
+	{
+		// Note: Z-index for each overlay is set by etherealize()
+		css_inject(/* css */`
+			.rcss-eth {
+				width: 100vw; height: 100vh;
+				position: absolute;
+				top: 0; left: 0;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				background-color: rgba(25,25,25,0.65);
+			}
+		`)
+	}
+
+	/**
+	 * Get a new ID for the given namespace. This will always return a unique string ID for whatever namespace
+	 * is given. In fact, no namespace can be given and a unique namespace will still be returned.
+	 * 
+	 * @param {String} id_namespace Some identifying information, so this ID can be human-read more clearly
+	 */
+	_id_get_next(id_namespace)
+	{
+		// Sanitize
+		if(typeof dom_src === "string") throw TypeError("Namespace ID must be string. Was " + id_namespace)
+
+		if(!(id_namespace in this._id_gen_map))
+		{
+			this._id_gen_map[id_namespace] = 0
+		}
+		this._id_gen_map[id_namespace] += 1
+
+		return id_namespace + this._id_gen_map[id_namespace]
+	}
+
+	
+	// A unique number to slap on the end of requests for anti-caching.
+	static get unique() {return new Date().getTime()}
+
+
+	/**
+	 * Modify a $.getJSON request data block to have a unique parameter which prevents caching.
+	 * @param {Object} request_data The key-value dict that is sent to the server in a $.getJSON request.
+	 */
+	anticache(request_data)
+	{
+		request_data._ = RegionApp.unique
+		return request_data
+	}
+
+
+	/**
+	 * Modify a plain URL (e.g. not a POST url) to have some random noise on the end that prevents it from
+	 * pulling out of cache.
+	 * @param {Object} url A plain url, like a src.
+	 */
+	anticache_url(url)
+	{
+		return url + "?_=" + RegionApp.unique
+	}
+
+
+	/**
+	 * @abstract
+	 * Get a CSRF token for this app. Behavior must be implemented in child app to work.
+	 * 
+	 * A CSRF token is not required for most RMF operations, but some key ones (like dispatch) will fail without it.
+	 */
+	token_get_csrf() {}
+
+
+	/**
+	 * Get the dispatch route url for this application. This function determines whether or not a dispatch backend will be loaded for this
+	 * app. This function is intended to be overwritten in applications which use dispatch
+	 * 
+	 * @returns {str} The route URL for this app's dispatch. Can be a full url like "http://www.aperture.com/_dispatch" or a relative one like
+	 * "/_dispatch"
+	 */
+	dispatch_get_url() {}
+
+
+	/**
+	 * Get the namespace which this app's dispatch instance should operate under.
+	 * 
+	 * @returns {str} The namespace string (see dispatch documentation)
+	 */
+	dispatch_get_namespace() {}
+
+
+	/**
+	 * Return the path to the dispatch module. This is defined by default as ../lib/dispatch.js but may be overridden in the app's child
+	 * class.
+	 */
+	dispatch_get_module_path()
+	{
+		return "../lib/dispatch.js"
+	}
+
+
+	/**
+	 * Get the dispatch backend for this app. This will just return this._dispatch_backend if there is one. If not, an error will be thrown
+	 * 
+	 * @return {DispatchClientJS} dispatch instance of the connected backend for this app
+	 */
+	get dispatch_backend()
+	{
+		if(this._dispatch_backend == undefined)
+		{
+			throw("App " + this.constructor.name + " has not defined a dispatch backend. Define a dispatch_get_url() method in the application class.")
+		}
+		return this._dispatch_backend
+	}
+	
+	/**
+	 * Call this to setup the listeners for focus. This is straightforward, but it belongs in the switchyard
+	 * rather than base region class because it is in the switchyard that all the data lives.
+	 * 
+	 * @param {Region} region 
+	 */
+	_focus_region_setup_listeners(region)
+	{
+		this.$reg.addEventListener("click", (e)=>
+		{
+			// If we have an event and it's already been used to set focus once, ignore it (but allow it to
+			// propagate)
+			if(e != undefined)
+			{
+				// If we've already used this event to set the focus
+				if(e.timeStamp == this._focus_settings.timestamp)
+				{
+					return
+				}
+				this._focus_settings.timestamp = e.timeStamp
+			}
+
+			// If we've made it this far during this event, set the focus region.
+			this.swyd.focus_region_set(this)
+		})
+	}
+
+	/**
+	 * Get the region that has most recently been brought into 'focus'. A region can be set as 'focused' if it is
+	 * activated, right clicked, or clicked. Note that this focus is independent of what the browser might
+	 * refer to as 'focused'.
+	 * 
+	 * @returns {Region} The currently in-focus region, or undefined if there is not one.
+	 */
+	focus_region_get()
+	{
+		return this._focus_settings.region
+	}
+
+	/**
+	 * Set the current focus region. This is called by the subregions when they are activated, right clicked, or
+	 * clicked.
+	 * 
+	 * //TODO write tests
+	 * 
+	 * @param {Region} region The region to set as focused
+	 */
+	focus_region_set(region)
+	{
+		this._focus_settings.region = region
+	}
+
+	/**
+	 * Key events in regional are handled slightly differently than other events. Normally, when a key event
+	 * occurs it will apply to anything 'content editable' like an input or a textarea. If nothing of the sort
+	 * is 'in focus', it ripples up until it hits the document.
+	 * 
+	 * For some regions, it's handy to capture key events for certain hotkey-type functions (CTRL+S to save, for
+	 * example). A keydown can not be directly bound to most tags that a $reg is likely to be, so region-specific
+	 * keypress handling requires a bit of its own logic. The Switchyard has listening methods that specifically
+	 * propagate the event to all regions that are currently 'active'. When a keydown event occurs, unless it
+	 * is captured (for instance, by a focused input box) all active regions will have this method called.
+	 * 
+	 * This method sets up the global key event handlers so that key presses propagate to active regions. This
+	 * can be called at any point - the regional structure does not have to be instantiated for this to work.
+	 */
+	_setup_key_events()
+	{
+
+		document.addEventListener("keydown", (e)=>
+		{
+			for (const [subreg_id, subreg] of Object.entries(this.subregions))
+			{
+				subreg._key_event_prop("keydown", e)
+			}
+		})
+
+		document.addEventListener("keyup", (e)=>
+		{
+			for (const [subreg_id, subreg] of Object.entries(this.subregions))
+			{
+				subreg._key_event_prop("keyup", e)
+			}
+		})
+	}
+
+	/**
+	 * Return space-separated-string list of classes to apply to the tooltip $dom object. If you want to add custom classes
+	 * override this function in the child app class.
+	 */
+	tooltip_get_classes()
+	{
+		return 'regcss-tooltip'
+	}
+
+	/**
+	 * If specifics are not important, this can be used to automatically create and append an element to
+	 * the <body> of the page which can be the root region element for an ethereal region.
+	 * 
+	 * @returns {RHElement} An element that has been newly created and appended to document body.
+	 */
+	eth_reg_create()
+	{
+		let el = RHElement.wrap(document.createElement("div"))
+		document.body.append(el)
+		return el
+	}
+
+
+	/**
+	 * Deactivate all associated regions.
+	 */
+	deactivate_all()
+	{
+		// Deactivate all top-level regions, which should in turn deactivate ALL regions due to nesting.
+		for(var x = 0; x < this.subregions.length; x++)
+		{
+			this.subregions[x].deactivate();
+		}
+	}
+
+	/**
+	 * 
+	 * @param {String} anchor_text The anchor text to look for
+	 * @param {Region} region The instance of the region that is bound to that anchor text.
+	 */
+	_register_anchor_location(anchor_text, region)
+	{
+		if(this.anchors_disable)
+		{
+			console.warn("Anchor not registered: " + this.anchor_text + ". Anchors are disabled for this app.")
+			return
+		}
+		if(this._registered_anchors[anchor_text] != undefined)
+		{
+			throw("Anchor " + anchor_text + " is already registered.")
+		}
+
+		// Bind the region ID to this location.
+		this._registered_anchors[anchor_text] = region.id
+	}
+
+
+	/**
+	 * Called when a region that has anchors enabled has its _anchor_activate() function called.
+	 */
+	_anchor_on_region_anchor_activate()
+	{
+		if(this.anchors_disable) return
+		// See _anchor_on_hash_change
+		this._anchors_ignore_next = 1
+	}
+
+
+	/**
+	 * Called when the url anchor changes. This includes the inital load of the page.
+	 * 
+	 * @param {Boolean} reload_on_blank Whether to initiate a reload if the 
+	 */
+	_anchor_on_hash_change(reload_on_blank)
+	{
+		if(this.anchors_disable) return
+		// If we've just called _anchor_activate() for a region, this function will fire. We don't actually
+		// want to do anything in that case because the change was triggered internally by our code so
+		// our code is handling that change separately. So we ignore the next change in that case.
+		if(this._anchors_ignore_next)
+		{
+			//console.warn("Anchor ignored")
+			this._anchors_ignore_next = 0
+			return
+		}
+
+		var current_anchor_text = document.location.hash.replace('#','')
+
+		// If this is the one called when the app first finishes loading, check if there was a #anchor set. If there was
+		// apply it here. For some apps a region will be loaded before this final step which sets the #anchor, which will clear
+		// whatever anchor was there before. This handles that case.
+		if(this._anchor_hash_on_load)
+		{
+			current_anchor_text = this._anchor_hash_on_load
+			this._anchor_hash_on_load = undefined
+		}
+
+		//console.warn("Anchor proceed with text: " + current_anchor_text)
+		// If there's no location at all, refresh the page.
+		if(current_anchor_text == "")
+		{
+			if(reload_on_blank)
+			{
+				document.location.reload()
+			}
+		}
+		else
+		{
+			this.deactivate_all()
+			var anchor_reg = this.r[this._registered_anchors[current_anchor_text]]
+			if(anchor_reg == undefined)
+			{
+				console.error("Anchor path " + current_anchor_text + " has no region associated with it.")
+				document.location.hash = ""
+
+			}
+			else
+			{
+				anchor_reg.anchor.setup_fn()
+			}
+		}
+
+	}
+
+	/**
+	 * Setup a comonent-$dom combo as draggable. Under the current system, there *must* be a component
+	 * tied to a $dom for it to be draggable.
+	 * @param {JQuery object} $dom The html object to be made draggable
+	 * @param {Component} component Instance of the component tied to this $dom
+	 * @param {Function} dragstart_fn OPTIONAL Function to be called on dragstart to set any special data,
+	 * provided with args: fn(e, component, $dom_comp)
+	 * @param {Function} dragend_fn OPTIONAL Function to be called on dragend to ensure cleanup,
+	 * provided with args: fn(e, component, $dom_comp)
+	 */
+	bind_draggable($dom, component, dragstart_fn, dragend_fn)
+	{
+		$dom.attr('draggable', 'true')
+		$dom.on('dragstart', function(e) // Starts a 'relocate to' drag operation.
+		{
+			e.stopPropagation();
+			this._dragdata.component = component
+			this._dragdata.$dom = $dom
+			this._dragdata.counter = 0
+
+			if(dragstart_fn) dragstart_fn(e, component, $dom)
+		}.bind(this))
+		.on('dragend', function(e) // End a 'relocate to' drag operation. See $row.drop()
+		{
+			if(dragend_fn) dragend_fn(e, this._dragdata.component, this._dragdata.$dom)
+
+			e.stopPropagation();
+			this._dragdata.component = undefined
+			this._dragdata.$dom = undefined
+			this._dragdata.counter = 0
+		}.bind(this))
+	}
+
+	/**
+	 * 
+	 * @param {JQuery object} $dom The html region that an object can be dropped
+	 * @param {String} class_name A css class to be added to $dom on dragenter and removed on dragleave
+	 * @param {Function} catch_dropped_fn The function to be executed when the object is dropped. This function is
+	 * provided with args: fn(e, dropped_component, $dom_dropped)
+	 * @param {Function} dragover_fn OPTIONAL Function to be called every dragover event,
+	 * provided with args: fn(e, dropped_component, $dom_dragging)
+	 */
+	bind_catchable($dom, class_name, catch_dropped_fn, dragover_fn)
+	{
+		$dom.on('drop', function(e) // Called when we drop a dragged name on this object.
+		{
+			$dom.removeClass(class_name)
+			catch_dropped_fn(e, this._dragdata.component, this._dragdata.$dom)
+			e.preventDefault();
+		}.bind(this))
+		.on('dragenter', function(e)
+		{
+			//e.stopPropagation(); // Important NOT to do this to support nested draggables
+			// CSS to highlight this tile
+			$dom.addClass(class_name)
+			this._dragdata.counter ++;
+			
+		}.bind(this))//Needed so drop will work
+		.on('dragleave', function(e)
+		{
+			this._dragdata.counter --;
+			if(this._dragdata.counter === 0)
+			{
+				// CSS to un-highlight this tile
+				$dom.removeClass(class_name)
+			}
+			//e.stopPropagation(); // Important NOT to do this to support nested draggables
+		}.bind(this))
+		.on('dragover', (e)=>
+		{
+			e.preventDefault() // Must be here for drop event to fire.
+			if(dragover_fn) dragover_fn(e, this._dragdata.component, this._dragdata.$dom)
+		});
+	}
+
+	/**
+	 * Unbind all drag/catch behaviors from the provided $dom
+	 * 
+	 *  @param {JQuery object} $dom
+	 */
+	unbind_both($dom)
+	{
+		$dom.off("drop").off("dragenter").off("dragleave").off("dragover").off("dragstart").off("dragend")
+		$dom.attr('draggable', 'false')
+	}
+}
+
+export {RegionSwitchyard}

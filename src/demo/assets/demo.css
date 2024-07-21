@@ -1,0 +1,52 @@
+body {
+	margin: 1vw;
+}
+
+button {
+	cursor: pointer;
+	border-radius: 0.5vw;
+	border: 1px solid black;
+}
+button:active {
+	background-color: aquamarine;
+}
+
+.master-layout {
+	width: 98vw;
+	height: 80vh;
+	display: flex;
+	justify-content: space-between;
+}
+
+.reg-telescope {
+	width: 20vw;
+	& .portal {
+		width: 20vw;
+		height: 20vw;
+		border: 1px solid black;
+		border-radius: 10vw;
+		overflow: hidden;
+	}
+	& .portal-cont {
+		width: 20vw;
+		height: 20vw;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	& .view {
+		width: 100%; height: 100%;
+	}
+	& .zoom-btn {
+		width: 2vw; height: 2vw;
+	}
+	& .spread {
+		display: flex;
+		justify-content: space-between;
+	}
+}
+
+.reg-text {
+	width: 77vw;
+	margin-left: 1vw; 
+}

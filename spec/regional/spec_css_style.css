@@ -1,0 +1,13 @@
+/* CSS Stylesheet to test CSS util behaviors. */
+
+
+.style-sheet-class {
+	border: 1px solid black;
+}
+
+.test-nested {
+	width: 20vw;
+	& .test-nested-sub {
+		border-radius: 1vw;
+	}
+}
