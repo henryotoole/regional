@@ -125,7 +125,7 @@ class Clipboard
 		// Process the single callback, which may or may not actually do something.
 		this.selection.callback(this.selection.components)
 
-		this.app.graphical_render();
+		this.app.render();
 	}
 
 	deselect()
@@ -144,7 +144,7 @@ class Clipboard
 				this.selection.components[x].on_deselect()
 			}
 			this.selection.components = []
-			this.app.graphical_render();
+			this.app.render();
 		}
 	}
 

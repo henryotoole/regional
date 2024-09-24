@@ -38,6 +38,7 @@ class RegInInput extends RegIn
 					border-radius: 5px;
 					color: red;
 					background-color: white;
+					display: none;
 				}
 			}
 		`
@@ -102,9 +103,9 @@ class RegInInput extends RegIn
 		}, failure_text)
 	}
 
-	_on_graphical_render()
+	_on_render()
 	{
-		super._on_graphical_render()
+		super._on_render()
 		this.input.value = this.settings.value
 	}
 }

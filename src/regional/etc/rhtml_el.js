@@ -53,13 +53,17 @@ class RHElement extends HTMLElement
 		el.hide = RHElement.prototype.hide.bind(el)
 		el.show = RHElement.prototype.show.bind(el)
 		el.empty = RHElement.prototype.empty.bind(el)
+		el.text = RHElement.prototype.text.bind(el)
+		el.dims_outer = RHElement.prototype.dims_outer.bind(el)
+		el.class_set = RHElement.prototype.class_set.bind(el)
 
 		return el
 	}
 
 	/**
 	 * Hide this element by applying 'display: none' to the style. The original style display, if it existed,
-	 * will be remembered.
+	 * will be remembered unless it was already 'none'. If it was already 'none', that is ignored and it will
+	 * be assumed that control of display is handled entirely by js logic.
 	 */
 	hide()
 	{
@@ -68,6 +72,9 @@ class RHElement extends HTMLElement
 		this._reg_ds.sh_is_hidden = true
 		this._reg_ds.sh_display = this.style.display
 		this.style.display = "none"
+
+		// Reset the display if the original value was 'none'.
+		if(this._reg_ds.sh_display == 'none') this._reg_ds.sh_display = ""
 	}
 
 	/**
@@ -77,6 +84,11 @@ class RHElement extends HTMLElement
 	show()
 	{
 		if(!this._reg_ds.sh_is_hidden) return
+
+		if(this._reg_ds.sh_display == 'none')
+		{
+			this._reg_ds.sh_display = ''
+		}
 
 		this._reg_ds.sh_is_hidden = false
 		this.style.display = this._reg_ds.sh_display
@@ -92,6 +104,50 @@ class RHElement extends HTMLElement
 		while (this.firstChild)
 		{
 			this.removeChild(this.lastChild);
+		}
+	}
+
+	/**
+	 * A quick method to add or remove a class on the basis of a boolean value.
+	 * 
+	 * This is merely shorthand for this.classList.toggle(class_name, true)
+	 * 
+	 * @param {String} class_name The name of a class
+	 * @param {Boolean} do_set True to set this class, False to remove
+	 */
+	class_set(class_name, do_set)
+	{
+		this.classList.toggle(class_name, do_set)
+	}
+
+	/**
+	 * Shorthand to set the text of this element. Achieved by setting this.textContent to provided string
+	 * 
+	 * @param {String} str text to set.
+	 */
+	text(str)
+	{
+		this.textContent = str
+	}
+
+	/**
+	 * Get the dimensions of this element in pixels, including margin, borders, padding, and inner content.
+	 * 
+	 * This will NOT work if strange things have been applied to the element, such as `transform: scale()`
+	 * 
+	 * @returns {Object.<String, int>} {x: x_px, y: y_px}
+	 */
+	dims_outer()
+	{
+		let computed_style = window.getComputedStyle(this)
+		let mt = parseInt(computed_style.marginTop, 10),
+			mb = parseInt(computed_style.marginBottom, 10),
+			ml = parseInt(computed_style.marginLeft, 10),
+			mr = parseInt(computed_style.marginRight, 10)
+		
+		return {
+			x: this.offsetWidth + ml + mr,
+			y: this.offsetHeight + mt + mb
 		}
 	}
 }

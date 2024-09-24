@@ -1,136 +1,87 @@
-// rfm_core/datahandlers/dh.js
-// Josh Reed 2021
-//
-// Core part of the regional model framework. This is the fundamental block of data. A datahandler
-// is designed to communicate with a backend keep a copy of some sort of data that exists on the
-// backend.
-//
-// To use this class, child classes must override the data_pull() functions. If the data is not
-// read only, then the data_push() function must also be overridden.
+/**
+ * @file Holds the core datahandler class
+ * @author Josh Reed
+ */
 
 /**
- * The DataHandler toolchain is still somewhat of a work in progress, reflecting my own understanding of
- * client-server API's changing over time. Originally the DataHandler developed entirely organically. I didn't
- * know much about REST, RPC, or even CRUD. I started by building really direct access-this-resource-at-this-
- * endpoint type methods, and over time wrote code to 'automate' that away.
+ * This is the base datahandler class. It aims to be as general as possible - to expose the maximum
+ * number of functions at the base level as possible without tying it to a specific model of interaction
+ * with the server (e.g. REST or RPC).
  * 
- * I wound up, in retrospect, creating something that *resembles* REST manipulated by CRUD abstract methods that
- * are prosecuted by RPC. This is, frankly, wildy hilarious. It's a bit of a mess, but it winds up achieving
- * the same thing as a RESTful API *in a very automatic way*. As things stand, I can spin up a project and
- * essentially securely expose databases to the frontend in an abstract way such that *I don't even have
- * to think about* the abstraction layers in between.
+ * The core behaviors that ALL datahandler should make available are as follows:
+ * + Data Pull: Retrieve all 'tracked' data from the server that has not yet already been pulled down. Depending on
+ * implementation, this might simply be all of the data that exists. A REST implementation may choose to track
+ * certain ID's and only retrieve certain rows. However it happens, pull() should all desired data that the
+ * datahandler has so far been configured to want available locally.
+ * + Data Push: Update the server to match this local client. Implementations will vary. The most efficient
+ * way to do this will be to only send data that has changed.
  * 
- * So, with this big refactor to v0.1 I have to ask "what does the DataHandler really do?". What's worth
- * preserving?
- * 
- * From the client-development perspective, the DataHandler implements abstractions of POST/PUT/GET/PATCH/DELETE.
- * But it also allows for Component-wrapping of data for methods and helpful things like 'get all X where X.y
- * is true'.
- * 
- * From the API-layer level (e.g. client-to-server comms) it automatically handles transferring data to and from
- * the server. But this is tricky! We can choose modularity or integration. Integration is, of course, faster
- * to develop but modularity allows for much simpler testing and actual API behavior.
- * 
- * At the backend (switching to Bundler stuff) the advantage is the opening-up of resources like SQL tables
- * with minimal boilerplate.
- * 
- * To preserve all this, the following toolchain would work: (client to server)
- * 1. DataHandlers that still expose the same methods to the rest of regional but use actual REST methods
- *    to communicate with the server.
- * 2. Client-to-backend communication occurs across an airgap that's actually REST compliant. The server
- *    has all those ungainly /api/thing/x and /api/that endpoints that POST/PUT/ETC can fire against.
- * 3. The backend can be *whatever*, but in my development stack I'll end up using Connexion -> Marshmallow ->
- *    SQLAlchemy -> SQL on a Flask server to automate away the access. Looking into this method, it's really
- *    the ultimate conclusion my own bundling work was asymptotally converging on.
- * 
- * This toolchain has the following advantages:
- * + Server can actually be airgapped from client. I can write a regional app for someone else's REST API and
- *   someone else can write a client for my server app.
- * + Full 'automation' from regional to SQL is still just as available, if not even easier to write thanks to
- *   Connexion's automation.
- * + My code projects can be broken into a frontend codebase and a backend codebase, if I desire in the future.
- * 
- * - Josh, '24
  */
 class DataHandler
 {
+	/** @type {Object} This is where all local data for this DataHandler is stored. */
+	_data
+
 	/**
+	 * Create a new datahandler instance. At the base level, this merely sets up an empty data variable.
+	 */
+	constructor()
+	{
+		this._data = {}
+	}
+
+	/**
+	 * @abstract
+	 * Retrieve all 'tracked' data from the server that has not yet already been pulled down. Depending on
+	 * implementation, this might simply be all of the data that exists. A REST implementation may choose to track
+	 * certain ID's and only retrieve certain rows. However it happens, pull() should all desired data that the
+	 * datahandler has so far been configured to want available locally.
 	 * 
-	 * @param {RegionApp} app RegionApp object
+	 * @returns {Promise} A promise that will resolve when the data pull is complete
 	 */
-	constructor(app)
-	{
-		this.data = {};
-		this.app = app
-
-		this._refreshing = 0
-
-		this.loaded_once = 0 // Set to true after this has been loaded at least once
-	}
+	async pull() {}
 
 	/**
-	 * Get whether this datahandler is currently waiting on a refresh.
-	 */
-	data_refresh_in_progress()
-	{
-		return this._refreshing
-	}
-
-	/**
-	 * Refresh the data associated with this data handler. This should be used sparingly as it refreshes *everything*. Intended
-	 * to be called but NOT overwritten in child class.
+	 * @abstract
+	 * Update the server to match this local client. Implementations will vary. All data can be sent to server,
+	 * or only the subset that has changed (for efficiency). As a result of calling this, the server data should
+	 * match that of the local client for all data in this datahandler.
 	 * 
-	 * @returns {Promise} A promise that will resolve with no arguments when the data is pulled down.
+	 * @returns {Promise} A promise that will resolve when the data push is complete
 	 */
-	data_refresh()
-	{
-		return new Promise((res, rej)=>
-		{
-			if(!this.data_refresh_in_progress())
-			{
-				this._refreshing = 1
-				this.data_pull().then(()=>
-				{
-					this._refreshing = 0
-					res()
-				})
-			}
-			else
-			{
-				
-			}
-			res()
-		})
-	}
+	async push() {}
 
 	/**
-	 * Contact a server to fetch all data for this datahandler. This must be overridden in child
-	 * class.
+	 * @abstract
+	 * Get a unique string / name of some sort that signifies this datahandler. This is used for situations
+	 * where a list of DH's needs to be keyed and accessed uniquely. Must be implemented in child.
 	 * 
-	 * @returns {Promise} A promise that will resolve with no arguments when the data is pulled down.
+	 * @returns {String} Unique string for this TYPE of datahandler.
 	 */
-	data_pull()
-	{
-		throw("Child datahandler provides no fetch method.")
-	}
+	get name() {}
 
 	/**
-	 * Contact a server to fetch all data for this datahandler. If this is not overridden in child,
-	 * then this datahandler is assumed to be read-only.
+	 * Get the current data-state checksum for this datahandler. This method may be overridden by a child
+	 * to take advantage of checksum caching.
 	 * 
-	 * @returns {Promise} A promise that will resolve with no arguments when the data is pushed up.
+	 * @returns {String} 32 char checksum.
 	 */
-	data_push()
-	{
-		throw("Attempted to push data on a read-only datahandler.")
-	}
+	get checksum() {return this.generate_checksum()}
 
 	/**
-	 * Refresh multiple datahandlers concurrently with a single promise.
+	 * @abstract
+	 * Generate a new, unique checksum that reflects the current state of this DataHandler.
+	 * 
+	 * @returns {String} 32 char checksum.
+	 */
+	generate_checksum() {}
+
+	/**
+	 * Call pull() on multiple datahandlers in parallel. 
 	 * 
 	 * @param {Array} dh_list A list of datahandlers
 	 * 
-	 * @returns {Promise} A promise that will resolve with no arguments when the data is pulled down.
+	 * @returns {Promise} A promise that will resolve with no arguments when all data is pulled down.
 	 */
 	static data_refresh_multiple(dh_list)
 	{
@@ -139,7 +90,7 @@ class DataHandler
 			var all_promises = []
 			dh_list.forEach((dh)=>
 			{
-				all_promises.push(dh.data_refresh())
+				all_promises.push(dh.pull())
 			})
 			Promise.all(all_promises).then(()=>
 			{
@@ -147,12 +98,6 @@ class DataHandler
 			})
 		})
 	}
-
-	/**
-	 * Validate all data instances and remove any that are invalid. Intended to be overwritten in child. May do nothing.
-	 */
-	data_validate() {}
-
 }
 
 export {DataHandler}

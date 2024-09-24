@@ -1,7 +1,7 @@
-// src/regions/reg_input.js
-// Josh Reed 2024
-//
-// Main input region subclass file.
+/**
+ * @file Base class for input Regions
+ * @author Josh Reed
+ */
 
 import {Region, RHElement} from "../regional.js"
 
@@ -9,7 +9,7 @@ import {Region, RHElement} from "../regional.js"
  * An input region is pretty much a regular region with a key piece of automation.
  * 
  * The usual information loop for a region is as follows:
- * `settings / data ---> graphical_render() ---> DOM ---> [user input] ---> control logic() ---> settings / data`
+ * `settings / data ---> render() ---> DOM ---> [user input] ---> control logic() ---> settings / data`
  * 
  * Usually, the control logic and render steps are complex enough that they must be written manually for every
  * distinct region. However, input cycles are so simple that those steps *can* be automated.
@@ -28,19 +28,26 @@ import {Region, RHElement} from "../regional.js"
  * `<textarea>` tags, and more.
  * 
  * ### Interacting with a Region Input ###
- * The 'value' of a RegIn should always be changed programatically by altering the settings key in the
- * super-region this input is bound to. Similarly, the value should be retrieved from that settings key as
- * well.
+ * The 'value' of a RegIn should always be changed programatically by altering the value reference key in the
+ * data object this input is bound to. Similarly, the value should be retrieved from that value reference key as
+ * well. In the below example, the input is bound to a settings key in the super-region and accessed accordingly.
  * 
- * Creating and registering an input region is the same as any other:
- * `let reg_input = (new RegionInput()).fab().link(super_region, $el, "settings_key")`
- * **Notably** there's a third argument to the link() function.
+ * ```
+ * // Register a new reg_input against the super-region's settings.some_key
+ * let reg_input = (new RegionInput()).fab().link(super_region, $el, super_region.settings, "some_key")
  * 
+ * // To change the shown value of reg input
+ * super_region.settings.some_key = "New value"
+ * reg_input.render() // Could also call render() on any super-region up the chain.
+ * 
+ * // >> Here, assume that the user made some sort of change to the <input> tag in the webpage
+ * let newly_chosen_value = super_region.settings.some_key
+ * ```
  * 
  * ### Extending This Class ###
  * Child classes should:
  * 1. Bind event handlers as appropriate to call _view_alters_value()
- * 2. Create an _on_graphical_render() method that applies this.settings.value into the DOM and calls super()
+ * 2. Create an _on_render() method that applies this.settings.value into the DOM and calls super()
  * 3. Create a Fabricator that allows autogeneration of the input and the validation failure message tags
  */
 class RegIn extends Region
@@ -49,10 +56,10 @@ class RegIn extends Region
 	_debouncer_duration
 	/** @type {Boolean} The number of debouncing actions that have occured within the operation */
 	_debouncer_count = 0
-	/** @type {string} Key at which the input value is stored in the settings object of superregion */
-	_super_settings_key
-	/** @descrption The last thing we pulled from the super-region settings key */
-	_super_last_pulled
+	/** @type {Object} Reference to variable at which region input value is stored */
+	_value_ref
+	/** @type {String} The key in `value_ref` at which value is stored: `value_ref[value_key] = value` */
+	_value_key
 	/**
 	 * @type {Function} If configured, the validation function for this input. Accepts one arg (the user-input
 	 * value) and expected to return True or False, depending on validity of data.
@@ -72,26 +79,60 @@ class RegIn extends Region
 		val_failure_state: undefined,
 	}
 
+	constructor()
+	{
+		super()
+		this._value_update_handlers = []
+	}
+
 	/**
 	 * Perform linking operations for this region:
 	 * + Link this region to its super-region and vice versa
 	 * + Link this region to the specific element in webpage DOM that it represents.
 	 * + Link this region to the switchyard and datahandlers and setup certain events.
-	 * + Assign a unique in-memory ID for this region and set the $reg_el's ID to the same.
+	 * + Assign a unique in-memory ID for this region and set the reg_el's ID to the same.
 	 * + Fabrication links (if fab() was called earlier), including links to this.$element and linking $elements
-	 *   to the $reg_el.
+	 *   to the reg_el.
+	 * 
+	 * The additional final two parameters allow this input region to store its value by reference in a location
+	 * of the implementor's choosing. This will most commonly be `superregion.settings` and `some_settings_key`.
+	 * It could also, for example, refer to the Switchyard settings or some Component's settings. It could
+	 * even be tied directly to data in a Datahandler!
 	 * 
 	 * @param {Region} reg_super The super (or parent) region that this region will be a subregion of.
-	 * @param {HTMLElement} $reg_el The main element for this region, which this region will be bound to.
-	 * @param {*} super_settings_ref Key at which the input value is stored in the settings object of superregion.
+	 * @param {HTMLElement} reg_el The main element for this region, which this region will be bound to.
+	 * @param {Object} value_ref Reference to object in which region input value is stored. See above.
+	 * @param {String} value_key The key in `value_ref` at which value is stored: `value_ref[value_key] = value`
 	 * 
-	 * @returns {Region} itself for function call chaining
+	 * @returns {this} itself for function call chaining
 	 */
-	link(reg_super, $reg_el, super_settings_key)
+	link(reg_super, reg_el, value_ref, value_key)
 	{
-		super.link(reg_super, $reg_el)
+		super.link(reg_super, reg_el)
 
-		this._super_settings_key = super_settings_key
+		this._value_ref = value_ref
+		this._value_key = value_key
+
+		return this
+	}
+
+	_on_link_post()
+	{
+		this.render_checksum_add_tracked('regin_value_ref', ()=>
+		{
+			return this._value_ref[this._value_key]
+		})
+	}
+
+	/**
+	 * Add a handler that will be called whenever the value for this input updates as a result of an action
+	 * taken by the user.
+	 * 
+	 * @param {Function} fn A function to call when the value for this object updates. Arg: new value
+	 */
+	add_value_update_handler(fn)
+	{
+		this._value_update_handlers.push(fn)
 	}
 
 	/**
@@ -110,11 +151,9 @@ class RegIn extends Region
 		// If we are debouncing, use timeouts to report value.
 		if(this._debouncer_duration)
 		{
-			console.log("Debouncing w/ value " + value)
 			this._debouncer_count++
 			window.setTimeout(function(original_debouncer_count, original_value)
 			{
-				console.log("Timeout callback w/ og_/current_count=" + original_debouncer_count + "/" + this._debouncer_count + ", og_val=" + original_value)
 				// If, at the end of the timeout, the debouncer count has not changed, we prosecute.
 				if(this._debouncer_count == original_debouncer_count)
 				{
@@ -158,7 +197,7 @@ class RegIn extends Region
 		}
 
 		// Always render in case failed state updated.
-		this.graphical_render()
+		this.render()
 	}
 
 	/**
@@ -170,8 +209,12 @@ class RegIn extends Region
 	 */
 	_view_alter_propagate(value)
 	{
-		this.superregion.settings[this._super_settings_key] = value
-		this.superregion.graphical_render()
+		this._value_ref[this._value_key] = value
+		this.superregion.render()
+		this._value_update_handlers.forEach((fn)=>
+		{
+			fn(value)
+		})
 	}
 
 	/**
@@ -242,7 +285,7 @@ class RegIn extends Region
 	/**
 	 * Set a debouncer for this input. When a debouncer is active, a series of view-value alterations that occurs
 	 * with no more than the debouncing delay between updates will all be considered one update. This can be
-	 * helpful when we don't wish to incur too many graphical_render() updates as values change.
+	 * helpful when we don't wish to incur too many render() updates as values change.
 	 * 
 	 * @param {Number} duration_s The number of seconds to use when debouncing, or undefined to disable.
 	 */
@@ -266,29 +309,29 @@ class RegIn extends Region
 	 * Completely redraw this region and all active subregions. Overridden here to selectively pull from
 	 * super-region settings value if it has changed from last time we pulled it.
 	 */
-	graphical_render()
+	render(force)
 	{
 		/**
 		 * This quirky behavior is needed to handle the state where the user has input invalid data and
 		 * has not yet fixed it. The conduct of proper MVC dictates that the model must match the view
-		 * and local settings must have the 'invalid' value until the usre fixes it. However, we don't
-		 * wish to expose the invalid value to the rest of the site.
+		 * and local settings must have the 'invalid' value until the user fixes it. However, we don't
+		 * wish to expose the invalid value upstream to the value_ref.
 		 * 
 		 * Thus, we prevent propagation from local- to region-value model/settings until the user fixes
 		 * the problem. However, during that time render() calls may originate elsewhere. We don't
 		 * want the model/settings value from the region to override the faulty data, as this would cause
-		 * it to confusingly just dissapear.
+		 * it to confusingly just disappear.
 		 * 
-		 * So, we don't trigger an update UNLESS a programattic change has occured since we last read the
-		 * variable.
+		 * If I ever switch over to having Proxy's for settings and data, this can be made more straightforwards
+		 * by not relying on render() to propagate value_ref changes and listening directly...
 		 */
-		if(this.superregion.settings[this._super_settings_key] != this._super_last_pulled)
+		
+		if(!this.settings.val_failure_state)
 		{
-			this.settings.value = this.superregion.settings[this._super_settings_key]
-			this._super_last_pulled = this.settings.value
+			this.settings.value = this._value_ref[this._value_key]
 		}
 
-		super.graphical_render()
+		super.render(force)
 	}
 
 	/**
@@ -298,7 +341,7 @@ class RegIn extends Region
 	 * 
 	 * Don't forget to call super() on child classes!
 	 */
-	_on_graphical_render()
+	_on_render()
 	{
 		this._val_notice_get().innerHTML = this._val_fail_text
 		this.settings.val_failure_state ? this._val_notice_get().show() : this._val_notice_get().hide()

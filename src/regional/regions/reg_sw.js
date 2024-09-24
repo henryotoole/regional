@@ -55,7 +55,8 @@ class RegionSwitchyard extends Region
 			route: '/_dispatch',
 			/** @description The 'namespace' that this regional application operates under */
 			namespace: "js",
-			verbose: 1,
+			/** @description Whether to print logs in verbose mode. */
+			verbose: false,
 			/**
 			 * @description Whether or not to load functions from server, increasing load times but improving
 			 * syntax for backend calls.
@@ -102,87 +103,98 @@ class RegionSwitchyard extends Region
 	 * 
 	 * Linking operations for the switchyard includes:
 	 * + Link this region to the specific element in webpage DOM that it represents.
-	 * + Assign a unique in-memory ID for this region and set the $reg_el's ID to the same.
+	 * + Assign a unique in-memory ID for this region and set the reg_el's ID to the same.
 	 * + Fabrication links (if fab() was called earlier), including links to this.$element and linking $elements
-	 *   to the $reg_el.
+	 *   to the reg_el.
 	 * 
-	 * @param {HTMLElement} $reg_el The DOM element for the switchyard, or undefined to leave it 'DOMless'
+	 * @param {HTMLElement} reg_el The DOM element for the switchyard, or undefined to leave it 'DOMless'
 	 * 
-	 * @returns {Region} itself for function call chaining
+	 * @returns {this} itself for function call chaining
 	 */
-	link($reg_el)
+	link(reg_el)
 	{
-		if($reg_el === undefined)
+		if(reg_el === undefined)
 		{
 			// Create an element that we will not attach to the DOM.
-			$reg_el = document.createElement("div")
+			reg_el = document.createElement("div")
 		}
 
-		this.$reg = $reg_el
-		this.$reg.setAttribute('rfm_reg', this.constructor.name)
+		this.reg = reg_el
+		this.reg.setAttribute('rfm_reg', this.constructor.name)
 
 		// Helpful for operations where we don't wish to distinguish between region and switchyard.
 		this.swyd = this
 
-		// Assign a unique in-memory ID for this region and set the $reg_el's ID to the same.
+		// Assign a unique in-memory ID for this region and set the reg_el's ID to the same.
 		this._link_ids()
 
 		// Fabrication links (if fab() was called earlier), including links to this.$element and linking $elements
-		// to the $reg_el.
+		// to the reg_el.
 		this._link_fabricate()
 
+		// Create subregions and datahandlers.
+		this._create_datahandlers()
+		this._create_subregions()
 		// Call post hook for subclass extension, if implemented.
 		this._on_link_post()
-		// Create subregions
-		this._create_subregions()
 
 		return this
 	}
 
 	/**
+	 * @abstract
+	 * 
+	 * This method should create all datahandlers that are needed for this application during the link()
+	 * phase of overall instantiation. This is called at the same time as _create_subregions() and only exists
+	 * to provide extra guidance as to the 'correct' place to define datahandlers.
+	 * 
+	 * Note that this function is NOT asynchronous. If the implementation desires datahandlers to have some
+	 * data available upon app load, use _load_datahandlers() as well.
+	 * 
+	 * Such a function might resemble:
+	 * _create_datahandlers()
+	 * {
+	 *     this.dh_one = new DHREST()
+	 *     this.dh_two = new DHTabuler()
+	 * 
+	 *     this.datahandler_subscribe([this.dh_one, this.dh_two])
+	 * }
+	 */
+	_create_datahandlers() {}
+
+	/**
 	 * This method is the primary data loader for the region structure. It will load the following in this order:
 	 * + Dispatch (which is instant unless configured to pull server methods)
-	 * > Setup datahandlers and regions
 	 * + Anything special, which would be defined in a subclass of RegionSwitchyard
-	 * + Datahandlers, which will be fully 
+	 * + Datahandlers as implemented in subclass. This may or may not result in actual loading, imp. dependent.
 	 * 
 	 * @returns {Promise} A promise that resolves when the app is fully loaded.
 	 */
-	load()
+	async load()
 	{
-		return new Promise((res, rej)=>
+		this.settings_refresh();
+
+		this._loading = true
+		return this._load_dispatch().then(()=>
 		{
-			// Define a general-purpose rejection function that rejects the overall promise
-			// and calls an abstract method for failure-to-load.
-			let rej_and_report = (e)=>
-			{
-				this.on_load_failed(e)
-				rej(e)
-			}
+			this.on_loaded_dispatch()
 
-			this._loading = true
-			this._load_dispatch().then(()=>
-			{
-				this.on_loaded_dispatch()
-
-				this.setup_datahandlers()
-
-				return this._load_special()
-			}).catch(rej_and_report).then(()=>
-			{
-				this.on_loaded_specials()
-				return this._load_datahandlers()
-			}).catch(rej_and_report).then(()=>
-			{
-				this._loading = false
-				this.settings_refresh();
-				this.on_load_complete()
-				this._call_on_load.forEach((fn)=>(fn()))
-				this._anchor_on_hash_change(0)
-				this.graphical_render()
-
-				res()
-			})
+			return this._load_special()
+		}).then(()=>
+		{
+			this.on_loaded_specials()
+			return this._load_datahandlers()
+		}).then(()=>
+		{
+			this._loading = false
+			this.on_load_complete()
+			this._call_on_load.forEach((fn)=>(fn()))
+			this._anchor_on_hash_change(0)
+			this.render()
+		}).catch((e)=>
+		{
+			this.on_load_failed(e)
+			throw e
 		})
 	}
 
@@ -200,20 +212,14 @@ class RegionSwitchyard extends Region
 	 * 
 	 *  @returns {Promise} A promise which loads dispatch.
 	 */
-	_load_dispatch()
+	async _load_dispatch()
 	{
 		return new Promise((res, rej)=>
 		{
-			var csrf_token = this.token_get_csrf()
-			if(csrf_token == undefined)
-			{
-				rej(new Error(
-					"Cannot instantiate dispatch instance because app " + this.constructor.name + " does not \
-					define a token_get_csrf() method."))
-			}
-			this.dispatch = new DispatchClientJS(this.dispatch_config.domain, this.dispatch_config.route, this.dispatch_config.namespace)
+			let csrf_token = this.token_get_csrf(), cfg = this.dispatch_config
+			this.dispatch = new DispatchClientJS(cfg.domain, cfg.route, cfg.namespace, cfg.verbose)
 			this.dispatch.setup_csrf(csrf_token)
-			if(this.dispatch_config.load_functions)
+			if(cfg.load_functions)
 			{
 				this.dispatch.setup_backend_functions().then(res).catch(rej)
 			}
@@ -230,21 +236,39 @@ class RegionSwitchyard extends Region
 	 * 
 	 * @returns {Promise} A promise which loads special resources.
 	 */
-	_load_special()
+	async _load_special()
 	{
-		return new Promise((res, rej)=> {res()})
+		return Promise.resolve()
 	}
 
 	/**
-	 * Called to load all datahandlers. This will load them all concurrently. If some datahandlers need to be
-	 * loaded before others, this function will need to be overwritten in child app class.
+	 * @abstract
+	 * Overwrite in child class to setup datahandlers for this project. Use of this method is only required
+	 * if certain datahandlers MUST be available when load() completes. This is ultimately a convenience method
+	 * which can be used to, for example:
+	 * + Setup any tracking that is desired so data is available on load() completion.
+	 * + Call pull() so that tracked data is available.
 	 * 
-	 * @returns {Promise} A promise which loads the datahandlers.
+	 * ```
+	 * _create_datahandlers()
+	 * {
+	 *     this.dh_one = new DHREST()
+	 *     this.dh_two = new DHTabuler()
+	 * 
+	 *     this.datahandler_subscribe([this.dh_one, this.dh_two])
+	 * }
+	 * 
+	 * _load_datahandlers()
+	 * {
+	 *     this.dh_one.track_ids([1, 2, 3])
+	 * 
+	 *     return this.pull()
+	 * }
+	 * ```
+	 * 
+	 * @returns {Promise} A promise that will resolve when datahandlers are setup.
 	 */
-	_load_datahandlers()
-	{
-		return DataHandler.data_refresh_multiple(this.datahandlers)
-	}
+	async _load_datahandlers() {return Promise.resolve()}
 
 	/**
 	 * @abstract
@@ -274,7 +298,7 @@ class RegionSwitchyard extends Region
 
 	/**
 	 * Register a function to be executed when the loading stage is complete. This will fire after the
-	 * post-load settings_refresh() but before the post-load graphical_render().
+	 * post-load settings_refresh() but before the post-load render().
 	 * 
 	 * @param {Function} fn A function that will execute with no arguments when the loading stage is complete.
 	 */
@@ -282,12 +306,6 @@ class RegionSwitchyard extends Region
 	{
 		this._call_on_load.push(fn)
 	}
-
-	/**
-	 * @abstract
-	 * Overwrite in child class to register all datahandlers for this project
-	 */
-	setup_datahandlers() {}
 
 	/**
 	 * @magic
@@ -420,7 +438,7 @@ class RegionSwitchyard extends Region
 	 */
 	_focus_region_setup_listeners(region)
 	{
-		this.$reg.addEventListener("click", (e)=>
+		this.reg.addEventListener("click", (e)=>
 		{
 			// If we have an event and it's already been used to set focus once, ignore it (but allow it to
 			// propagate)
@@ -470,7 +488,7 @@ class RegionSwitchyard extends Region
 	 * is 'in focus', it ripples up until it hits the document.
 	 * 
 	 * For some regions, it's handy to capture key events for certain hotkey-type functions (CTRL+S to save, for
-	 * example). A keydown can not be directly bound to most tags that a $reg is likely to be, so region-specific
+	 * example). A keydown can not be directly bound to most tags that a reg is likely to be, so region-specific
 	 * keypress handling requires a bit of its own logic. The Switchyard has listening methods that specifically
 	 * propagate the event to all regions that are currently 'active'. When a keydown event occurs, unless it
 	 * is captured (for instance, by a focused input box) all active regions will have this method called.

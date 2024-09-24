@@ -94,6 +94,20 @@ class Fabricator
 	}
 
 	/**
+	 * Get a member by name. This is a convenience function that just does a key lookup in the member dict.
+	 * 
+	 * @param {String} member_name The member name to get
+	 * 
+	 * @returns {RHElement} The chosen member or undefined if none
+	 */
+	get_member(member_name)
+	{
+		if(!this._immutable) throw("Cannot call until after fabricate()")
+			
+		return this._members[member_name]
+	}
+
+	/**
 	 * Append all fabricated elements to the provided one.
 	 * 
 	 * @param {HTMLElement} el The element (presumably from the real document) to append our fabrication to
@@ -101,9 +115,11 @@ class Fabricator
 	append_to(el)
 	{
 		// I think it's this simple. Perhaps, I'll find in the future they should be cloned first
-		for(const child of this._dom.body.children)
+		for(let i = (this._dom.body.children.length - 1); i >= 0; i--)
 		{
-			el.append(child)
+			// The loop goes in reverse because it seems that appending a child to the provided element
+			// removes it from the _dom body.
+			el.prepend(this._dom.body.children[i])
 		}
 	}
 

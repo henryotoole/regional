@@ -3,6 +3,8 @@
 // 
 // Some random little utilities.
 
+import {b64_md5} from "../regional.js"
+
 /**
  * Setup the sentry instance to track errors on this app.
  * @param {Boolean} dev_mode Whether this server is in dev mode
@@ -60,6 +62,26 @@ function generate_hash()
 	return result;
 }
 
+/**
+ * Get a 'unique' checksum for the provided data using MD5.
+ * 
+ * Quirks:
+ * 1. MD5 means that collisions are possible but extremely unlikley.
+ * 2. This uses JSON.stringify() which has slightly different behavior than, for example, python's json.dumps().
+ *    Thus this checksum method might not work cross-platform.
+ * 
+ * Speed:
+ * I've not done extensive tests, but on my own machine in firefox it took 76ms to checksum a 30,000 record
+ * datatable in dict form.
+ * 
+ * @param {Object} data serializable JSON data
+ * 
+ * @returns {String} A checksum 32 chars in length.
+ */
+function checksum_json(data)
+{
+	return b64_md5(JSON.stringify(data))
+}
 
 /**
  * Check whether this email is valid or not.
@@ -105,6 +127,103 @@ function str_locations(substring, string){
 	return a;
 }
 
+/**
+ * Execute a series of promises serially. The first promise in the list will return before the next is
+ * launched.
+ * 
+ * Now, promises execute immediately upon instantiation. This means that this function cannot simply be given
+ * a list of *promises* - they'd already be executing. Instead, the argument is a list of functions that
+ * **return** promises.
+ * 
+ * @param {Array.<Function>} promise_fns A list of functions that return promises
+ * 
+ * @returns {Promise} A wrapping promise that will resolve when all sub-promises have resolved.
+ */
+function serial_promises(promise_fns)
+{
+	if(promise_fns[0] instanceof Promise) throw new Error(
+		"serial_promises() takes a list of functions that return promises, not a list of actual promises."
+	)
+	let out_list = []
+
+	return new Promise((res, rej)=>
+	{
+		let fn = (index)=>
+		{
+			promise_fns[index]().then((out)=>
+			{
+				out_list.push(out)
+				if((index + 1) < promise_fns.length)
+				{
+					fn(index + 1)
+				}
+				else
+				{
+					res(out_list)
+				}
+			})
+		}
+		fn(0)
+	})
+}
+
+/**
+ * Get the extension from a path, URL, or filename.
+ * 
+ * @param {String} fpath 
+ * @returns {String} Extension, e.g. "ext" or undefined if none.
+ */
+function path_ext(fpath)
+{
+	let name = fpath.split("/").pop()
+	if(name.indexOf(".") == -1) return undefined
+	let ext = name.split(".").pop()
+	return ext
+}
+
+const _throttle_memspace = {}
+
+/**
+ * This function will construct and return a 'throttled' version of the provided `fn`. Calls to this resulting
+ * function will be passed through if it's been more than `min_delay` since the last call and ignored otherwise.
+ * 
+ * Note that this behavior results in applying the call to the 'leading' edge of the throttling event.
+ * 
+ * https://developer.mozilla.org/en-US/docs/Glossary/Throttle
+ * 
+ * @param {Number} min_delay_ms The minimum amount of time that must elapse between successive calls to fn
+ * @param {Function} fn The function to be called
+ * 
+ * @returns {Function} A function to call that will be forward to 'fn' as long as enough time has elapsed.
+ */
+function throttle_leading(min_delay_ms, fn)
+{
+	const fnid = generate_hash()
+	return (...args)=>
+	{
+		if(!_throttle_memspace.hasOwnProperty(fnid)) _throttle_memspace[fnid] = 0
+		let elapsed_ms = Date.now() - _throttle_memspace[fnid]
+		if(elapsed_ms > min_delay_ms)
+		{
+			fn(...args)
+			_throttle_memspace[fnid] = Date.now()
+		}
+	}
+}
+
+/**
+ * Linearly interpolate within the range from y1 to y2, given the location of x on the range from x1 to x2.
+ * 
+ * @param {Number} x1 
+ * @param {Number} x2 
+ * @param {Number} y1 
+ * @param {Number} y2 
+ * @param {Number} x Choice number
+ */
+function linterp(x1, x2, y1, y2, x)
+{
+	return y1 + (((x - x1)*(y2 - y1))/(x2-x1))
+}
 
 /**
  * Class containing only static methods for color utility.
@@ -427,8 +546,13 @@ export {
 	bindify_number,
 	sentry_setup,
 	generate_hash,
+	checksum_json,
 	download_file,
 	validate_email,
 	str_locations,
+	serial_promises,
+	path_ext,
+	throttle_leading,
+	linterp,
 	ColorUtil
 }
