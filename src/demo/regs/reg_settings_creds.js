@@ -3,7 +3,7 @@
 //
 // Actual dummy region, existing only to show nesting.
 
-import {Region, RHElement, Fabricator} from "../../regional/regional.js"
+import {Region, RHElement, Fabricator} from "regional"
 
 class RegSettingsCreds extends Region
 {

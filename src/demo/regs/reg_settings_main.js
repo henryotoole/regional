@@ -3,16 +3,10 @@
 //
 // Demo region class for main settings pain.
 
-import {Region, RHElement, Fabricator} from "../../regional/regional.js"
+import {Region, RHElement, Fabricator} from "regional"
 
 class RegSettingsMain extends Region
 {
-	/** @type {RHElement} Row to populate with hero choice buttons */
-	hero_row
-	/** @description Settings object for this region. This is local data which is erased on page refresh. */
-	settings = {
-	}
-
 	fab_get()
 	{
 		// Note that the toplevel nesting selector matches attribute rfm_reg="RegText". This attribute is
@@ -50,6 +44,17 @@ class RegSettingsMain extends Region
 		return new Fabricator(html).add_css_rule(css)
 	}
 
+	/** @type {RHElement} Row to populate with hero choice buttons */
+	hero_row
+	/** @description Settings object for this region. This is local data which is erased on page refresh. */
+	settings = {
+	}
+	
+	_on_link_post()
+	{
+		this.render_checksum_add_tracked('active_text', ()=>{return this.swyd.settings.text_active})
+	}
+
 	/**
 	 * Call when the user selects a 'hero'. The name of this person will be key in swyd.data_readonly.texts.
 	 * This function will select that setting at the swyd level and re-render all.
@@ -59,10 +64,10 @@ class RegSettingsMain extends Region
 	settings_select_hero(hero_name)
 	{
 		this.swyd.settings.text_active = hero_name
-		this.swyd.graphical_render()
+		this.swyd.render()
 	}
 
-	_on_graphical_render()
+	_on_render()
 	{
 		this.hero_row.empty()
 		Object.keys(this.swyd.data_readonly.names).forEach((name)=>

@@ -3,7 +3,7 @@
 //
 // A region that's generated via a Fabricator and contains some text and a search input.
 
-import {Region, RHElement, Fabricator, RegInInput} from "../../regional/regional.js";
+import {Region, RHElement, Fabricator, RegInInput} from "regional";
 
 /**
  * This region contains some text and an input that allows it to be searched, highlighting matching text.
@@ -15,69 +15,6 @@ import {Region, RHElement, Fabricator, RegInInput} from "../../regional/regional
  */
 class RegText extends Region
 {
-	/** @type {RHElement} The text area where text is displayed and highlighted. */
-	text
-	/** @type {RHElement} The div tag that contains the search regin.*/
-	regin_search_cont
-	/** @type {RHElement} A little div tag containing the number of search occurrences.*/
-	count
-	/** @type {RHElement} A button to summon the settings overlay.*/
-	settings
-	/** @type {RegInInput} The search regin */
-	regin_search
-	/** @description Settings object for this region. This is local data which is erased on page refresh. */
-	settings = {
-		/** @description The text to search for and highlight */
-		search_text: undefined,
-	}
-
-	/**
-	 * Used here to load text from file and bind some handlers.
-	 */
-	_on_link_post()
-	{
-		this.swyd.call_on_load(()=>
-		{
-			fetch('./assets/clausewitz.txt')
-				.then(response => response.text())
-				.then((data) => {
-					this.settings.text = data
-					this.graphical_render()
-				})
-			console.log(document)
-		})
-		this.settings.addEventListener("click", ()=>{
-			this.swyd.reg_settings.activate()
-		})
-	}
-
-	_create_subregions()
-	{
-		// Create regin for text input
-		this.regin_search = (new RegInInput()).fab().link(this, this.regin_search_cont, "search_text")
-	}
-
-	/**
-	 * @returns {Number} The number of occurrences of the current search string in the main text.
-	 */
-	get occurrences()
-	{
-		if(!this.settings.search_text) return 0
-		return this.master_text.split(this.settings.search_text).length - 1
-	}
-
-	/**
-	 * NOTE: Text is stored at the swyd level because other regions at the same level as this region need
-	 * to access it.
-	 * 
-	 * @returns {string} Text as selected setting at swyd level or "" if none selected.
-	 */
-	get master_text()
-	{
-		let text = this.swyd.data_readonly.text[this.swyd.settings.text_active]
-		return (!text) ? "" : text
-	}
-
 	fab_get()
 	{
 		// Note that the toplevel nesting selector matches attribute rfm_reg="RegText". This attribute is
@@ -127,11 +64,74 @@ class RegText extends Region
 						<div class='count'>Occurrences:</div>
 						<div rfm_member='count' class='count'> 0 </div>
 					</div>
-					<button rfm_member='settings'> Settings </button>
+					<button rfm_member='settings_btn'> Settings </button>
 				</div>
 			</div>
 		`
 		return new Fabricator(html).add_css_rule(css)
+	}
+
+	/** @type {RHElement} The text area where text is displayed and highlighted. */
+	text
+	/** @type {RHElement} The div tag that contains the search regin.*/
+	regin_search_cont
+	/** @type {RHElement} A little div tag containing the number of search occurrences.*/
+	count
+	/** @type {RHElement} A button to summon the settings overlay.*/
+	settings_btn
+	/** @type {RegInInput} The search regin */
+	regin_search
+	/** @description Settings object for this region. This is local data which is erased on page refresh. */
+	settings = {
+		/** @description The text to search for and highlight */
+		search_text: undefined,
+	}
+
+	/**
+	 * Used here to load text from file and bind some handlers.
+	 */
+	_on_link_post()
+	{
+		this.swyd.call_on_load(()=>
+		{
+			fetch('/site/assets/clausewitz.txt')
+				.then(response => response.text())
+				.then((data) => {
+					this.settings.text = data
+					this.render()
+				})
+		})
+		this.settings_btn.addEventListener("click", ()=>{
+			this.swyd.reg_settings.activate()
+		})
+		this.render_checksum_add_tracked('active_text', ()=>{return this.swyd.settings.text_active})
+	}
+
+	_create_subregions()
+	{
+		// Create regin for text input
+		this.regin_search = (new RegInInput()).fab().link(this, this.regin_search_cont, this.settings, "search_text")
+	}
+
+	/**
+	 * @returns {Number} The number of occurrences of the current search string in the main text.
+	 */
+	get occurrences()
+	{
+		if(!this.settings.search_text) return 0
+		return this.master_text.split(this.settings.search_text).length - 1
+	}
+
+	/**
+	 * NOTE: Text is stored at the swyd level because other regions at the same level as this region need
+	 * to access it.
+	 * 
+	 * @returns {string} Text as selected setting at swyd level or "" if none selected.
+	 */
+	get master_text()
+	{
+		let text = this.swyd.data_readonly.text[this.swyd.settings.text_active]
+		return (!text) ? "" : text
 	}
 	
 	_on_settings_refresh()
@@ -139,7 +139,7 @@ class RegText extends Region
 		this.settings.search_text = ""
 	}
 
-	_on_graphical_render()
+	_on_render()
 	{
 		this.text.empty()
 		this._draw_text_children(this.master_text, this.settings.search_text).forEach((child)=>{

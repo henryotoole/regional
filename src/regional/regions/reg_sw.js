@@ -4,7 +4,7 @@
 // Contains the switchyard region class.
 
 import {Region, DataHandler, css_inject, css_format_as_rule, Clipboard, RHElement} from "../regional.js"
-import {DispatchClientJS} from "../../../lib/dispatch.js"
+import {DispatchClientJS} from "../lib/dispatch.js"
 
 /**
  * The switchyard is the toplevel region and the general manager of the entire application. It acts as the

@@ -314,7 +314,7 @@ class Region
 	{
 		// Basic checks.
 		if(!this.reg) throw(new RegionalStructureError("Must link() before etherealize()"))
-		if(!this.superregion instanceof RegionSwitchyard) throw(new RegionalStructureError(
+		if(!(this.superregion instanceof RegionSwitchyard)) throw(new RegionalStructureError(
 			"Ethereal regions must be direct children of the Switchyard"
 		))
 		if(!z_index) z_index = 0

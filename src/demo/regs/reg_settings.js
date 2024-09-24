@@ -3,7 +3,7 @@
 //
 // A region that demonstrates overlays in the form of a 'settings' page with multiple tabs.
 
-import {Region, Fabricator, RHElement} from "../../regional/regional.js"
+import {Region, Fabricator, RHElement} from "regional"
 import {RegSettingsMain, RegSettingsCreds} from "../demo.js"
 
 class RegSettings extends Region
@@ -26,8 +26,8 @@ class RegSettings extends Region
 	reg_settings_creds
 	/** @description Settings object for this region. This is local data which is erased on page refresh. */
 	settings = {
-		/** @description Selective active pain by reference. */
-		active_pane: undefined
+		/** @description Selective active pain by ID. */
+		active_pane_id: undefined
 	}
 
 	fab_get()
@@ -105,12 +105,12 @@ class RegSettings extends Region
 		// Bind close behavior
 		this.exit.addEventListener("click", ()=>{this.deactivate()})
 		this.tab_main.addEventListener("click", ()=>{
-			this.settings.active_pane = this.reg_settings_main
-			this.graphical_render()
+			this.settings.active_pane_id = this.reg_settings_main.id
+			this.render()
 		})
 		this.tab_creds.addEventListener("click", ()=>{
-			this.settings.active_pane = this.reg_settings_creds
-			this.graphical_render()
+			this.settings.active_pane_id = this.reg_settings_creds.id
+			this.render()
 		})
 	}
 
@@ -118,18 +118,23 @@ class RegSettings extends Region
 	{
 		this.reg_settings_main = (new RegSettingsMain()).fab().link(this, this.el_settings_main)
 		this.reg_settings_creds = (new RegSettingsCreds()).fab().link(this, this.el_settings_creds)
+
+		this.panes = [
+			this.reg_settings_main,
+			this.reg_settings_creds
+		]
 	}
 
 	_on_settings_refresh()
 	{
-		this.settings.active_pane = this.reg_settings_main
+		this.settings.active_pane_id = 0
 	}
 
-	_on_graphical_render()
+	_on_render()
 	{
-		[this.reg_settings_main, this.reg_settings_creds].forEach((reg_pane)=>
+		this.panes.forEach((reg_pane)=>
 		{
-			if(reg_pane.id == this.settings.active_pane.id)
+			if(reg_pane.id == this.settings.active_pane_id)
 			{
 				reg_pane.activate()
 			}

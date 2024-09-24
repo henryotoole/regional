@@ -4,7 +4,7 @@
 // The switchyard class for the demo module. Although it is a region, I prefer to place it at the top
 // level of a module rather than in the /regs folder.
 
-import {RegionSwitchyard} from "../../regional/regional.js";
+import {RegionSwitchyard} from "regional";
 import {RegTelescope, RegText, RegSettings} from "../demo.js"
 
 class RegSWDemo extends RegionSwitchyard
@@ -55,12 +55,12 @@ class RegSWDemo extends RegionSwitchyard
 		this.data_readonly.text = {}
 		Object.keys(this.data_readonly.names).forEach((name)=>
 		{
-			fetch('./assets/' + name + '.txt')
+			fetch('/site/assets/' + name + '.txt')
 				.then(response => response.text())
 				.then((data) => {
 					this.data_readonly.text[name] = data
 					this._on_settings_refresh()
-					this.graphical_render()
+					this.render()
 				})
 		})
 	}

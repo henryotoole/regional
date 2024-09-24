@@ -28,7 +28,7 @@ describe("RHTML Elements", function() {
 		rhel.hide()
 		expect(el.style.display).toBe('none')
 		rhel.show()
-		expect(el.style.display).toBe('none')
+		expect(el.style.display).toBe('')
 	})
 
 	it("show and hide works correctly when display is set to flex", function (){

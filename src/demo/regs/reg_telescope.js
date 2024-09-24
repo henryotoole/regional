@@ -3,7 +3,7 @@
 //
 // A region that wraps an in-DOM set of elements that show a sort of view through a telescope.
 
-import {Region, RHElement} from "../../regional/regional.js";
+import {Region, RHElement} from "regional";
 
 /**
  * The 'telescope' region provides a viewport with changing images and a 'zoom' function.
@@ -37,11 +37,11 @@ class RegTelescope extends Region
 
 		/** @type {Array.<str>} List of relative reverences to image assets for telescope view */
 		this.telescope_images = [
-			"./assets/telescope_0.png",
-			"./assets/telescope_1.png",
-			"./assets/telescope_2.png",
-			"./assets/telescope_3.png",
-			"./assets/telescope_4.png"
+			"/site/assets/telescope_0.png",
+			"/site/assets/telescope_1.png",
+			"/site/assets/telescope_2.png",
+			"/site/assets/telescope_3.png",
+			"/site/assets/telescope_4.png"
 		]
 	}
 
@@ -71,7 +71,7 @@ class RegTelescope extends Region
 		if(new_zoom > 4) new_zoom = 4
 		if(new_zoom < 0) new_zoom = 0
 		this.settings.zoom_level = new_zoom
-		this.graphical_render()
+		this.render()
 	}
 
 	/**
@@ -89,7 +89,7 @@ class RegTelescope extends Region
 	 * This is called whenever this specific region has its settings refershed. This is the preferred location
 	 * to actually place the code that will 'redraw' a region.
 	 */
-	_on_graphical_render()
+	_on_render()
 	{
 		this.portal.style.borderWidth = this.settings.zoom_level + 1 + "px"
 		this.view.setAttribute('src', this.telescope_images[this.settings.zoom_level])
