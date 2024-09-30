@@ -1,4 +1,4 @@
-version := "0.1.0"
+version := "0.1.1"
 
 
 # bundle source into output files in bin
@@ -6,12 +6,14 @@ bundle:
 	esbuild ./src/regional/regional.js \
 		--bundle \
 		--outfile=./bin/regional_{{version}}.js \
-		--format=esm
+		--format=esm \
+		--keep-names
 
 	esbuild ./src/demo/demo.js \
 		--bundle \
 		--outfile=./bin/demo_{{version}}.js \
-		--format=esm
+		--format=esm \
+		--keep-names
 
 # deploy the 'demo' site, which just copies over the latest regional versions into the 'site' js folder
 # and associated assets

@@ -19,6 +19,7 @@ describe("DataHandler REST", function() {
 			// Strip the origin portion of the URL
 			return new Promise((res, rej)=>
 			{
+				backend.last_fetch_opts = JSON.parse(JSON.stringify(options))
 				res(backend[url.pathname][options.method](options, url.searchParams))
 			})
 		}
@@ -101,7 +102,8 @@ describe("DataHandler REST", function() {
 						return backend.responsify_json({})
 					},
 				}
-			}
+			},
+			"last_fetch_opts": undefined
 		}
 		backend.add_id(1)
 		backend.add_id(2)
@@ -411,6 +413,19 @@ describe("DataHandler REST", function() {
 		{
 			expect(dh._data[1]['key']).toEqual('val1')
 			expect(dh._data_from_server[1]['key']).toEqual('val1')
+		})
+	})
+
+	it("correctly handle cache bust setting", function() {
+		expect(backend.last_fetch_opts).toEqual(undefined)
+		return dh._get(1).then((data)=>
+		{
+			expect(backend.last_fetch_opts.cache).toEqual("no-store")
+			dh._cache_bust_enabled = false
+			return dh._get(1)
+		}).then((data)=>
+		{
+			expect(backend.last_fetch_opts.cache).toEqual(undefined)
 		})
 	})
 })

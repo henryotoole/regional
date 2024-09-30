@@ -1491,6 +1491,8 @@ var DHREST = class extends DHTabular {
   _bulk_get_enabled;
   /** @type {Boolean} Whether the bulk_update method is used to update multiple ID's */
   _bulk_update_enabled;
+  /** @type {Boolean} Whether cachebusting is enabled. If so, all fetch operations will cachebust. */
+  _cache_bust_enabled;
   /** @type {string} The key of the ID for a record in server-returned data */
   _id_key;
   /** @type {PUSH_CONFLICT_RESOLUTIONS} how this dh instance will resolve push conflicts */
@@ -1515,6 +1517,7 @@ var DHREST = class extends DHTabular {
     }
     this._bulk_get_enabled = bulk_get;
     this._bulk_update_enabled = bulk_update;
+    this._cache_bust_enabled = true;
     this._id_key = id_key;
     this.push_conflict_res = PUSH_CONFLICT_RESOLUTIONS.WITH_EXCEPTION;
     this._tracked_ids = [];
@@ -1763,11 +1766,15 @@ var DHREST = class extends DHTabular {
         altered_url = new URL(this._url_for(void 0) + "_get_filtered");
         altered_url.searchParams.append("filter", btoa(JSON.stringify(filter_data)));
       }
+      let opts = {
+        method: "GET"
+      };
+      if (this._cache_bust_enabled) {
+        opts.cache = "no-store";
+      }
       fetch(
         altered_url,
-        {
-          method: "GET"
-        }
+        opts
       ).then((response) => {
         if (response.status == 200) {
           return response.json();
@@ -1792,11 +1799,15 @@ var DHREST = class extends DHTabular {
    */
   async _get(id2) {
     return new Promise((res, rej) => {
+      let opts = {
+        method: "GET"
+      };
+      if (this._cache_bust_enabled) {
+        opts.cache = "no-store";
+      }
       fetch(
         this._url_for(id2),
-        {
-          method: "GET"
-        }
+        opts
       ).then((response) => {
         if (response.status == 200) {
           return response.json();
@@ -1868,11 +1879,15 @@ var DHREST = class extends DHTabular {
         res({});
         return;
       }
+      let opts = {
+        method: "GET"
+      };
+      if (this._cache_bust_enabled) {
+        opts.cache = "no-store";
+      }
       fetch(
         altered_url,
-        {
-          method: "GET"
-        }
+        opts
       ).then((response) => {
         if (response.status == 200) {
           return response.json();

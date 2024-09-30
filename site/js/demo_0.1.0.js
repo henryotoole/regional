@@ -1,11 +1,16 @@
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
 // src/regional/lib/md5.js
 var b64pad = "";
 function b64_md5(s) {
   return rstr2b64(rstr_md5(str2rstr_utf8(s)));
 }
+__name(b64_md5, "b64_md5");
 function rstr_md5(s) {
   return binl2rstr(binl_md5(rstr2binl(s), s.length * 8));
 }
+__name(rstr_md5, "rstr_md5");
 function rstr2b64(input) {
   try {
     b64pad;
@@ -24,6 +29,7 @@ function rstr2b64(input) {
   }
   return output;
 }
+__name(rstr2b64, "rstr2b64");
 function str2rstr_utf8(input) {
   var output = "";
   var i = -1;
@@ -58,6 +64,7 @@ function str2rstr_utf8(input) {
   }
   return output;
 }
+__name(str2rstr_utf8, "str2rstr_utf8");
 function rstr2binl(input) {
   var output = Array(input.length >> 2);
   for (var i = 0; i < output.length; i++)
@@ -66,12 +73,14 @@ function rstr2binl(input) {
     output[i >> 5] |= (input.charCodeAt(i / 8) & 255) << i % 32;
   return output;
 }
+__name(rstr2binl, "rstr2binl");
 function binl2rstr(input) {
   var output = "";
   for (var i = 0; i < input.length * 32; i += 8)
     output += String.fromCharCode(input[i >> 5] >>> i % 32 & 255);
   return output;
 }
+__name(binl2rstr, "binl2rstr");
 function binl_md5(x, len) {
   x[len >> 5] |= 128 << len % 32;
   x[(len + 64 >>> 9 << 4) + 14] = len;
@@ -155,43 +164,54 @@ function binl_md5(x, len) {
   }
   return Array(a, b, c, d);
 }
+__name(binl_md5, "binl_md5");
 function md5_cmn(q, a, b, x, s, t) {
   return safe_add(bit_rol(safe_add(safe_add(a, q), safe_add(x, t)), s), b);
 }
+__name(md5_cmn, "md5_cmn");
 function md5_ff(a, b, c, d, x, s, t) {
   return md5_cmn(b & c | ~b & d, a, b, x, s, t);
 }
+__name(md5_ff, "md5_ff");
 function md5_gg(a, b, c, d, x, s, t) {
   return md5_cmn(b & d | c & ~d, a, b, x, s, t);
 }
+__name(md5_gg, "md5_gg");
 function md5_hh(a, b, c, d, x, s, t) {
   return md5_cmn(b ^ c ^ d, a, b, x, s, t);
 }
+__name(md5_hh, "md5_hh");
 function md5_ii(a, b, c, d, x, s, t) {
   return md5_cmn(c ^ (b | ~d), a, b, x, s, t);
 }
+__name(md5_ii, "md5_ii");
 function safe_add(x, y) {
   var lsw = (x & 65535) + (y & 65535);
   var msw = (x >> 16) + (y >> 16) + (lsw >> 16);
   return msw << 16 | lsw & 65535;
 }
+__name(safe_add, "safe_add");
 function bit_rol(num2, cnt) {
   return num2 << cnt | num2 >>> 32 - cnt;
 }
+__name(bit_rol, "bit_rol");
 
 // src/regional/etc/util.js
 function checksum_json(data2) {
   return b64_md5(JSON.stringify(data2));
 }
+__name(checksum_json, "checksum_json");
 function validate_email(email) {
   const re = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
   return re.test(String(email).toLowerCase());
 }
+__name(validate_email, "validate_email");
 function str_locations(substring, string) {
   var a = [], i = -1;
   while ((i = string.indexOf(substring, i + 1)) >= 0) a.push(i);
   return a;
 }
+__name(str_locations, "str_locations");
 
 // src/regional/etc/css.js
 function css_selector_exists(rule_or_selector) {
@@ -218,6 +238,7 @@ function css_selector_exists(rule_or_selector) {
   }
   return false;
 }
+__name(css_selector_exists, "css_selector_exists");
 function css_inject(rule) {
   let regss;
   document.adoptedStyleSheets.forEach((ss) => {
@@ -230,206 +251,13 @@ function css_inject(rule) {
   }
   regss.insertRule(rule, regss.cssRules.length);
 }
-
-// src/regional/etc/clipboard.js
-var Clipboard = class {
-  /**
-   * Setup the app-wide clipboard and selection. Only components can be copied to the clipboard.
-   */
-  constructor(app) {
-    this.control_types = {
-      "keystroke": { id: "keystroke" },
-      "rightclick": { id: "rightclick" },
-      "button": { id: "button" }
-    };
-    this.copydata = {
-      control_type: void 0,
-      // The specific control method used to copy the attached object
-      components: []
-      // This is where the component copy list will actually reside.
-    };
-    this.selection = {
-      components: [],
-      // The components currently selected (not copies, instances)
-      callback: () => {
-      }
-      // Called when a selection is performed
-    };
-    this.selection_locked = 0;
-    this.app = app;
-  }
-  /**
-   * Copy the current selection to the clipboard.
-   * @param {Event} e The event from click or keypress
-   * @param {Object} control_type The app.clipboard.control_type for this copy operation.
-   */
-  copy(e, control_type) {
-    console.log("Copying " + this.selection.components + " to clipboard.");
-    this.clear();
-    for (var x = 0; x < this.selection.components.length; x++) {
-      this.copydata.components.push(this.selection.components[x].get_copy());
-    }
-    this.copydata.control_type = control_type;
-  }
-  /**
-   * Paste whatever is on the clipboard as best possible. This is handled centrally (in the app.clipboard) to account
-   * for all the different originations of this event.
-   * @param {Event} e The event from click or keypress
-   * @param {Object} control_type The app.clipboard.control_type for this copy operation.
-   */
-  paste(e, control_type) {
-    var target_region = this.app.focus_region_get();
-    if (control_type.id == this.control_types.keystroke.id) {
-    } else if (control_type.id == this.control_types.rightclick.id) {
-    } else {
-      return;
-    }
-    console.log("Pasting " + this.copydata.components.length + " objects into region " + target_region.id);
-    for (var x = 0; x < this.copydata.components.length; x++) {
-      target_region.paste_component(e, this.copydata.components[x]);
-    }
-  }
-  /**
-   * Clear the clipboard of any attached data.
-   */
-  clear() {
-    this.copydata.control_type = void 0;
-    this.copydata.components = [];
-  }
-  /**
-   * Select a component or list of components, app wide. This is the primary function for this action.
-   * @param {*} components Component or list of components
-   */
-  select(components) {
-    if (!(components instanceof Array)) components = [components];
-    if (this.selection_locked) {
-      console.log("Cannot select right now -- selection is locked.");
-      return;
-    }
-    console.log("Selecting: ");
-    console.log(components);
-    this.selection.components = components;
-    for (var x = 0; x < this.selection.components.length; x++) {
-      this.selection.components[x].on_select();
-    }
-    this.selection.callback(this.selection.components);
-    this.app.render();
-  }
-  deselect() {
-    if (this.selection_locked) {
-      console.log("Cannot deselect right now -- selection is locked.");
-      return;
-    }
-    if (this.has_selected()) {
-      for (var x = 0; x < this.selection.components.length; x++) {
-        this.selection.components[x].on_deselect();
-      }
-      this.selection.components = [];
-      this.app.render();
-    }
-  }
-  /**
-   * Return true if anything is currently selected.
-   */
-  has_selected() {
-    return this.selection.components.length > 0;
-  }
-  /**
-   * Return true if the first AND only selected object is instanceof one of the provided component
-   * class defs.
-   * @param {Array} ClassDefs A list of ClassDefs
-   */
-  has_selected_of_type(ClassDefs) {
-    if (this.selection.components.length == 1) {
-      return ClassDefs.some((CD) => {
-        return this.selection.components[0] instanceof CD;
-      });
-    }
-    return 0;
-  }
-  /**
-   * Return true if anything is currently copied on clipboard.
-   */
-  has_copied() {
-    return this.copydata.components.length > 0;
-  }
-  /**
-   * Return True if all comps on the clipboard are of the ClassDef's provided in defs
-   * @param {Array} defs A list of ClassDef's
-   */
-  has_copied_of_type(defs) {
-    if (this.copydata.components.length == 0) return 0;
-    var components = this.copydata.components;
-    for (var x = 0; x < components.length; x++) {
-      var flag = 0;
-      for (var y = 0; y < defs.length; y++) {
-        if (components[x] instanceof defs[y]) {
-          flag = 1;
-        }
-      }
-      if (flag == 0) {
-        return 0;
-      }
-    }
-    return 1;
-  }
-  /**
-   * Return 1 if the provided component is selected, 0 otherwise.
-   * @param {Component} component 
-   */
-  is_selected(component) {
-    for (var x = 0; x < this.selection.components.length; x++) {
-      if (this.selection.components[x].type == component.type && this.selection.components[x].data.id == component.data.id) {
-        return 1;
-      }
-    }
-    return 0;
-  }
-  /**
-   * Return a list of current selected components.
-   */
-  get_selected() {
-    return this.selection.components;
-  }
-  /**
-   * Lock the selection such that it cannot be unselected and no other selections can be made
-   */
-  selection_lock() {
-    this.selection_locked = 1;
-  }
-  /**
-   * Unlock the selection such that it operates like normal.
-   */
-  selection_unlock() {
-    this.selection_locked = 0;
-  }
-  /**
-   * Register a callback to be called on selection. There can only be one of these at a time, so binding a selection function
-   * will automatically clear the last selection function.
-   * @param {Function} fn The function to be called on select. Args: (components)
-   */
-  selection_bind(fn) {
-    this.selection.callback = fn;
-  }
-  /**
-   * Clear whatever selection callback was bound.
-   */
-  selection_bind_clear() {
-    this.selection.callback = () => {
-    };
-  }
-  /**
-   * Call the delete() function on every selected component
-   */
-  selection_delete() {
-    for (var x = 0; x < this.selection.components.length; x++) {
-      this.selection.components[x].delete();
-    }
-  }
-};
+__name(css_inject, "css_inject");
 
 // src/regional/etc/rhtml_el.js
 var RHElement = class _RHElement extends HTMLElement {
+  static {
+    __name(this, "RHElement");
+  }
   // Typehint declarations.
   /** @description Add a custom place to put data, tied to only one key to prevent collisions. */
   _reg_ds = {
@@ -531,6 +359,9 @@ var RHElement = class _RHElement extends HTMLElement {
 
 // src/regional/etc/fab.js
 var Fabricator = class {
+  static {
+    __name(this, "Fabricator");
+  }
   /**
    * Instantiate a new Fabricator instance with the provided HTML.
    * 
@@ -707,25 +538,31 @@ var Fabricator = class {
    * Investigate this.dom to discover all 'rfm_members' within. This will populate this._members.
    */
   _members_discover() {
-    let traverse = (el) => {
+    let traverse = /* @__PURE__ */ __name((el) => {
       for (const child of el.children) {
         if (child.hasAttribute("rfm_member")) {
           this._members[child.getAttribute("rfm_member")] = RHElement.wrap(child);
         }
         traverse(child);
       }
-    };
+    }, "traverse");
     traverse(this._dom.body);
   }
 };
 
 // src/regional/etc/errors.js
 var RegionalStructureError = class extends Error {
+  static {
+    __name(this, "RegionalStructureError");
+  }
   constructor(message, options) {
     super(message, options);
   }
 };
 var FabricatorError = class extends Error {
+  static {
+    __name(this, "FabricatorError");
+  }
   /**
    * Create a new fabricator error.
    * @param {string} message Message to print
@@ -749,6 +586,9 @@ var PUSH_CONFLICT_RESOLUTIONS = {
 
 // src/regional/regions/reg.js
 var Region = class _Region {
+  static {
+    __name(this, "Region");
+  }
   /** Get how long the mouse must hover over a tooltip to show it, in seconds.*/
   static get tooltip_hover_time() {
     return 2;
@@ -1274,6 +1114,9 @@ var Region = class _Region {
 
 // src/regional/regions/reg_in.js
 var RegIn = class extends Region {
+  static {
+    __name(this, "RegIn");
+  }
   /** @type {Number} If undefined, debouncer is disabled. If defined, the debouncer duration in seconds. */
   _debouncer_duration;
   /** @type {Boolean} The number of debouncing actions that have occured within the operation */
@@ -1502,6 +1345,9 @@ var RegIn = class extends Region {
 
 // src/regional/regions/reg_in_input.js
 var RegInInput = class extends RegIn {
+  static {
+    __name(this, "RegInInput");
+  }
   /** @type {RHElement} The input tag reference */
   input;
   fab_get() {
@@ -1587,6 +1433,9 @@ var RegInInput = class extends RegIn {
 
 // src/regional/lib/dispatch.js
 var DispatchClientJS = class {
+  static {
+    __name(this, "DispatchClientJS");
+  }
   /**
    * Initialize a dispatch client which can communicate with a central dispatch server. This client will be assigned
    * a unique session id and all requests to the server will have this ID associated with it.
@@ -1873,6 +1722,9 @@ var DispatchClientJS = class {
 
 // src/regional/regions/reg_sw.js
 var RegionSwitchyard = class extends Region {
+  static {
+    __name(this, "RegionSwitchyard");
+  }
   /**
    * Instantiate a new Switchyard region. A webapp should have only one instance of this for a page at
    * a time.
@@ -1920,18 +1772,6 @@ var RegionSwitchyard = class extends Region {
     this._call_on_load = [];
     this._css_setup();
     this._setup_key_events();
-    this.clipboard = new Clipboard(this);
-    document.addEventListener("click", (e) => {
-      this.clipboard.deselect();
-    });
-    this._dragdata = { component: void 0 };
-    this._registered_anchors = {};
-    window.addEventListener("hashchange", (e) => {
-      this._anchor_on_hash_change(1);
-    });
-    this._anchors_ignore_next = 0;
-    this._anchor_hash_on_load = document.location.hash.replace("#", "");
-    this.anchors_disable = 0;
   }
   /**
    * Linking for a Switchyard is substantially different from regular regions. The link method
@@ -2005,7 +1845,6 @@ var RegionSwitchyard = class extends Region {
       this._loading = false;
       this.on_load_complete();
       this._call_on_load.forEach((fn) => fn());
-      this._anchor_on_hash_change(0);
       this.render();
     }).catch((e) => {
       this.on_load_failed(e);
@@ -2279,13 +2118,6 @@ var RegionSwitchyard = class extends Region {
     });
   }
   /**
-   * Return space-separated-string list of classes to apply to the tooltip $dom object. If you want to add custom classes
-   * override this function in the child app class.
-   */
-  tooltip_get_classes() {
-    return "regcss-tooltip";
-  }
-  /**
    * If specifics are not important, this can be used to automatically create and append an element to
    * the <body> of the page which can be the root region element for an ethereal region.
    * 
@@ -2304,125 +2136,13 @@ var RegionSwitchyard = class extends Region {
       this.subregions[x].deactivate();
     }
   }
-  /**
-   * 
-   * @param {String} anchor_text The anchor text to look for
-   * @param {Region} region The instance of the region that is bound to that anchor text.
-   */
-  _register_anchor_location(anchor_text, region) {
-    if (this.anchors_disable) {
-      console.warn("Anchor not registered: " + this.anchor_text + ". Anchors are disabled for this app.");
-      return;
-    }
-    if (this._registered_anchors[anchor_text] != void 0) {
-      throw "Anchor " + anchor_text + " is already registered.";
-    }
-    this._registered_anchors[anchor_text] = region.id;
-  }
-  /**
-   * Called when a region that has anchors enabled has its _anchor_activate() function called.
-   */
-  _anchor_on_region_anchor_activate() {
-    if (this.anchors_disable) return;
-    this._anchors_ignore_next = 1;
-  }
-  /**
-   * Called when the url anchor changes. This includes the inital load of the page.
-   * 
-   * @param {Boolean} reload_on_blank Whether to initiate a reload if the 
-   */
-  _anchor_on_hash_change(reload_on_blank) {
-    if (this.anchors_disable) return;
-    if (this._anchors_ignore_next) {
-      this._anchors_ignore_next = 0;
-      return;
-    }
-    var current_anchor_text = document.location.hash.replace("#", "");
-    if (this._anchor_hash_on_load) {
-      current_anchor_text = this._anchor_hash_on_load;
-      this._anchor_hash_on_load = void 0;
-    }
-    if (current_anchor_text == "") {
-      if (reload_on_blank) {
-        document.location.reload();
-      }
-    } else {
-      this.deactivate_all();
-      var anchor_reg = this.r[this._registered_anchors[current_anchor_text]];
-      if (anchor_reg == void 0) {
-        console.error("Anchor path " + current_anchor_text + " has no region associated with it.");
-        document.location.hash = "";
-      } else {
-        anchor_reg.anchor.setup_fn();
-      }
-    }
-  }
-  /**
-   * Setup a comonent-$dom combo as draggable. Under the current system, there *must* be a component
-   * tied to a $dom for it to be draggable.
-   * @param {JQuery object} $dom The html object to be made draggable
-   * @param {Component} component Instance of the component tied to this $dom
-   * @param {Function} dragstart_fn OPTIONAL Function to be called on dragstart to set any special data,
-   * provided with args: fn(e, component, $dom_comp)
-   * @param {Function} dragend_fn OPTIONAL Function to be called on dragend to ensure cleanup,
-   * provided with args: fn(e, component, $dom_comp)
-   */
-  bind_draggable($dom, component, dragstart_fn, dragend_fn) {
-    $dom.attr("draggable", "true");
-    $dom.on("dragstart", function(e) {
-      e.stopPropagation();
-      this._dragdata.component = component;
-      this._dragdata.$dom = $dom;
-      this._dragdata.counter = 0;
-      if (dragstart_fn) dragstart_fn(e, component, $dom);
-    }.bind(this)).on("dragend", function(e) {
-      if (dragend_fn) dragend_fn(e, this._dragdata.component, this._dragdata.$dom);
-      e.stopPropagation();
-      this._dragdata.component = void 0;
-      this._dragdata.$dom = void 0;
-      this._dragdata.counter = 0;
-    }.bind(this));
-  }
-  /**
-   * 
-   * @param {JQuery object} $dom The html region that an object can be dropped
-   * @param {String} class_name A css class to be added to $dom on dragenter and removed on dragleave
-   * @param {Function} catch_dropped_fn The function to be executed when the object is dropped. This function is
-   * provided with args: fn(e, dropped_component, $dom_dropped)
-   * @param {Function} dragover_fn OPTIONAL Function to be called every dragover event,
-   * provided with args: fn(e, dropped_component, $dom_dragging)
-   */
-  bind_catchable($dom, class_name, catch_dropped_fn, dragover_fn) {
-    $dom.on("drop", function(e) {
-      $dom.removeClass(class_name);
-      catch_dropped_fn(e, this._dragdata.component, this._dragdata.$dom);
-      e.preventDefault();
-    }.bind(this)).on("dragenter", function(e) {
-      $dom.addClass(class_name);
-      this._dragdata.counter++;
-    }.bind(this)).on("dragleave", function(e) {
-      this._dragdata.counter--;
-      if (this._dragdata.counter === 0) {
-        $dom.removeClass(class_name);
-      }
-    }.bind(this)).on("dragover", (e) => {
-      e.preventDefault();
-      if (dragover_fn) dragover_fn(e, this._dragdata.component, this._dragdata.$dom);
-    });
-  }
-  /**
-   * Unbind all drag/catch behaviors from the provided $dom
-   * 
-   *  @param {JQuery object} $dom
-   */
-  unbind_both($dom) {
-    $dom.off("drop").off("dragenter").off("dragleave").off("dragover").off("dragstart").off("dragend");
-    $dom.attr("draggable", "false");
-  }
 };
 
 // src/demo/regs/reg_sw_demo.js
 var RegSWDemo = class extends RegionSwitchyard {
+  static {
+    __name(this, "RegSWDemo");
+  }
   /** @type {Region} Telescope region */
   reg_telescope;
   /** @type {Region} Text area region */
@@ -2480,6 +2200,9 @@ var RegSWDemo = class extends RegionSwitchyard {
 
 // src/demo/regs/reg_telescope.js
 var RegTelescope = class extends Region {
+  static {
+    __name(this, "RegTelescope");
+  }
   /**
    * This telescope region binds itself to pure HTML as already written in the DOM.
    */
@@ -2548,6 +2271,9 @@ var RegTelescope = class extends Region {
 
 // src/demo/regs/reg_text.js
 var RegText = class extends Region {
+  static {
+    __name(this, "RegText");
+  }
   fab_get() {
     let css = (
       /* css */
@@ -2716,6 +2442,9 @@ var RegText = class extends Region {
 
 // src/demo/regs/reg_settings.js
 var RegSettings = class extends Region {
+  static {
+    __name(this, "RegSettings");
+  }
   /** @type {RHElement} Button to activate main settings pane */
   tab_main;
   /** @type {RHElement} Button to activate creds settings pane */
@@ -2846,6 +2575,9 @@ var RegSettings = class extends Region {
 
 // src/demo/regs/reg_settings_main.js
 var RegSettingsMain = class extends Region {
+  static {
+    __name(this, "RegSettingsMain");
+  }
   fab_get() {
     let css = (
       /* css */
@@ -2933,6 +2665,9 @@ var RegSettingsMain = class extends Region {
 
 // src/demo/regs/reg_settings_creds.js
 var RegSettingsCreds = class extends Region {
+  static {
+    __name(this, "RegSettingsCreds");
+  }
   fab_get() {
     let css = (
       /* css */

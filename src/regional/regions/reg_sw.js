@@ -78,21 +78,6 @@ class RegionSwitchyard extends Region
 		// Run any 'instant' setup functions
 		this._css_setup()
 		this._setup_key_events()
-
-		// REFACTOR LINE
-
-		this.clipboard = new Clipboard(this) // Semi-refactored
-		document.addEventListener("click", (e)=>{this.clipboard.deselect()})
-
-		// Setup drag dataspot. Used by component class
-		// TODO refactor dragdata once I've got a webpage running
-		this._dragdata = {component: undefined}
-		// TODO refactor anchors... eventually.
-		this._registered_anchors = {} // See _register_anchor_location()
-		window.addEventListener("hashchange", (e)=>{this._anchor_on_hash_change(1)})
-		this._anchors_ignore_next = 0 // See _anchor_on_hash_change()
-		this._anchor_hash_on_load = document.location.hash.replace('#','')
-		this.anchors_disable = 0 // Set this to true in child constructor to disable anchor behavior.
 	}
 
 	/**
@@ -189,7 +174,6 @@ class RegionSwitchyard extends Region
 			this._loading = false
 			this.on_load_complete()
 			this._call_on_load.forEach((fn)=>(fn()))
-			this._anchor_on_hash_change(0)
 			this.render()
 		}).catch((e)=>
 		{
@@ -517,15 +501,6 @@ class RegionSwitchyard extends Region
 	}
 
 	/**
-	 * Return space-separated-string list of classes to apply to the tooltip $dom object. If you want to add custom classes
-	 * override this function in the child app class.
-	 */
-	tooltip_get_classes()
-	{
-		return 'regcss-tooltip'
-	}
-
-	/**
 	 * If specifics are not important, this can be used to automatically create and append an element to
 	 * the <body> of the page which can be the root region element for an ethereal region.
 	 * 
@@ -549,181 +524,6 @@ class RegionSwitchyard extends Region
 		{
 			this.subregions[x].deactivate();
 		}
-	}
-
-	/**
-	 * 
-	 * @param {String} anchor_text The anchor text to look for
-	 * @param {Region} region The instance of the region that is bound to that anchor text.
-	 */
-	_register_anchor_location(anchor_text, region)
-	{
-		if(this.anchors_disable)
-		{
-			console.warn("Anchor not registered: " + this.anchor_text + ". Anchors are disabled for this app.")
-			return
-		}
-		if(this._registered_anchors[anchor_text] != undefined)
-		{
-			throw("Anchor " + anchor_text + " is already registered.")
-		}
-
-		// Bind the region ID to this location.
-		this._registered_anchors[anchor_text] = region.id
-	}
-
-
-	/**
-	 * Called when a region that has anchors enabled has its _anchor_activate() function called.
-	 */
-	_anchor_on_region_anchor_activate()
-	{
-		if(this.anchors_disable) return
-		// See _anchor_on_hash_change
-		this._anchors_ignore_next = 1
-	}
-
-
-	/**
-	 * Called when the url anchor changes. This includes the inital load of the page.
-	 * 
-	 * @param {Boolean} reload_on_blank Whether to initiate a reload if the 
-	 */
-	_anchor_on_hash_change(reload_on_blank)
-	{
-		if(this.anchors_disable) return
-		// If we've just called _anchor_activate() for a region, this function will fire. We don't actually
-		// want to do anything in that case because the change was triggered internally by our code so
-		// our code is handling that change separately. So we ignore the next change in that case.
-		if(this._anchors_ignore_next)
-		{
-			//console.warn("Anchor ignored")
-			this._anchors_ignore_next = 0
-			return
-		}
-
-		var current_anchor_text = document.location.hash.replace('#','')
-
-		// If this is the one called when the app first finishes loading, check if there was a #anchor set. If there was
-		// apply it here. For some apps a region will be loaded before this final step which sets the #anchor, which will clear
-		// whatever anchor was there before. This handles that case.
-		if(this._anchor_hash_on_load)
-		{
-			current_anchor_text = this._anchor_hash_on_load
-			this._anchor_hash_on_load = undefined
-		}
-
-		//console.warn("Anchor proceed with text: " + current_anchor_text)
-		// If there's no location at all, refresh the page.
-		if(current_anchor_text == "")
-		{
-			if(reload_on_blank)
-			{
-				document.location.reload()
-			}
-		}
-		else
-		{
-			this.deactivate_all()
-			var anchor_reg = this.r[this._registered_anchors[current_anchor_text]]
-			if(anchor_reg == undefined)
-			{
-				console.error("Anchor path " + current_anchor_text + " has no region associated with it.")
-				document.location.hash = ""
-
-			}
-			else
-			{
-				anchor_reg.anchor.setup_fn()
-			}
-		}
-
-	}
-
-	/**
-	 * Setup a comonent-$dom combo as draggable. Under the current system, there *must* be a component
-	 * tied to a $dom for it to be draggable.
-	 * @param {JQuery object} $dom The html object to be made draggable
-	 * @param {Component} component Instance of the component tied to this $dom
-	 * @param {Function} dragstart_fn OPTIONAL Function to be called on dragstart to set any special data,
-	 * provided with args: fn(e, component, $dom_comp)
-	 * @param {Function} dragend_fn OPTIONAL Function to be called on dragend to ensure cleanup,
-	 * provided with args: fn(e, component, $dom_comp)
-	 */
-	bind_draggable($dom, component, dragstart_fn, dragend_fn)
-	{
-		$dom.attr('draggable', 'true')
-		$dom.on('dragstart', function(e) // Starts a 'relocate to' drag operation.
-		{
-			e.stopPropagation();
-			this._dragdata.component = component
-			this._dragdata.$dom = $dom
-			this._dragdata.counter = 0
-
-			if(dragstart_fn) dragstart_fn(e, component, $dom)
-		}.bind(this))
-		.on('dragend', function(e) // End a 'relocate to' drag operation. See $row.drop()
-		{
-			if(dragend_fn) dragend_fn(e, this._dragdata.component, this._dragdata.$dom)
-
-			e.stopPropagation();
-			this._dragdata.component = undefined
-			this._dragdata.$dom = undefined
-			this._dragdata.counter = 0
-		}.bind(this))
-	}
-
-	/**
-	 * 
-	 * @param {JQuery object} $dom The html region that an object can be dropped
-	 * @param {String} class_name A css class to be added to $dom on dragenter and removed on dragleave
-	 * @param {Function} catch_dropped_fn The function to be executed when the object is dropped. This function is
-	 * provided with args: fn(e, dropped_component, $dom_dropped)
-	 * @param {Function} dragover_fn OPTIONAL Function to be called every dragover event,
-	 * provided with args: fn(e, dropped_component, $dom_dragging)
-	 */
-	bind_catchable($dom, class_name, catch_dropped_fn, dragover_fn)
-	{
-		$dom.on('drop', function(e) // Called when we drop a dragged name on this object.
-		{
-			$dom.removeClass(class_name)
-			catch_dropped_fn(e, this._dragdata.component, this._dragdata.$dom)
-			e.preventDefault();
-		}.bind(this))
-		.on('dragenter', function(e)
-		{
-			//e.stopPropagation(); // Important NOT to do this to support nested draggables
-			// CSS to highlight this tile
-			$dom.addClass(class_name)
-			this._dragdata.counter ++;
-			
-		}.bind(this))//Needed so drop will work
-		.on('dragleave', function(e)
-		{
-			this._dragdata.counter --;
-			if(this._dragdata.counter === 0)
-			{
-				// CSS to un-highlight this tile
-				$dom.removeClass(class_name)
-			}
-			//e.stopPropagation(); // Important NOT to do this to support nested draggables
-		}.bind(this))
-		.on('dragover', (e)=>
-		{
-			e.preventDefault() // Must be here for drop event to fire.
-			if(dragover_fn) dragover_fn(e, this._dragdata.component, this._dragdata.$dom)
-		});
-	}
-
-	/**
-	 * Unbind all drag/catch behaviors from the provided $dom
-	 * 
-	 *  @param {JQuery object} $dom
-	 */
-	unbind_both($dom)
-	{
-		$dom.off("drop").off("dragenter").off("dragleave").off("dragover").off("dragstart").off("dragend")
-		$dom.attr('draggable', 'false')
 	}
 }
 
