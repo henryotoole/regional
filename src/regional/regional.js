@@ -48,5 +48,6 @@ export {RegIn} from "./regions/reg_in.js"
 export {RegInInput} from "./regions/reg_in_input.js"
 export {RegInCheckbox} from "./regions/reg_in_checkbox.js"
 export {RegInTextArea} from "./regions/reg_in_textarea.js"
+export {RegInSelect} from "./regions/reg_in_select.js"
 
 export {RegionSwitchyard} from "./regions/reg_sw.js"
