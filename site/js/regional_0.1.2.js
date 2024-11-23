@@ -3764,14 +3764,15 @@ var RegInSelect = class extends RegIn {
   _on_render() {
     super._on_render();
     this.select.empty();
-    Object.entries(this.settings.options).forEach(([k, v]) => {
+    let options = this.settings.options != void 0 ? this.settings.options : {};
+    Object.entries(options).forEach(([k, v]) => {
       let opt = RHElement.wrap(document.createElement("option"));
       opt.setAttribute("value", k);
       opt.textContent = v;
       this.select.append(opt);
     });
-    if (this.settings.value != "" && !this.settings.options.hasOwnProperty(this.settings.value)) {
-      let k = Object.keys(this.settings.options), v = k.length > 0 ? k[0] : "";
+    if (this.settings.value != "" && !options.hasOwnProperty(this.settings.value)) {
+      let k = Object.keys(options), v = k.length > 0 ? k[0] : "";
       this._view_alters_value(v);
     }
     this.select.value = this.settings.value;

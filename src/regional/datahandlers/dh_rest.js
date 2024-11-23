@@ -66,24 +66,14 @@ class ErrorREST extends Error
  * '.../noun/<id>'        | GET     # Get data for a specific 'noun'
  * '.../noun/<id>'        | PUT     # Update data for a specific 'noun'
  * '.../noun/<id>'        | DELETE  # Delete a 'noun'
- * -----------------------+---------+-----------------------------------
- * '.../noun_get_filtered?filter={"key", "val"}'
- *                        | GET     # Get a list of 'noun' ID's that match filter
- * '.../noun_get_bulk?ids=[...]'
- *                        | GET     # Get data for several 'nouns'
- * -----------------------+---------+-----------------------------------
  * ```
  * If the API differs from this form in some way, various methods (_get, _create, etc.) may have to be
  * altered in a child class.
  * 
- * **Bulk Get**
- * Getting data in bulk consolidates many requests into one. However, it uses a non-standard REST method
- * that may not be available. It can be disabled.
- * 
  * **Filtering**
  * Filtering is a way to get a subset of ID's by some means of filtering.
- * `GET /noun_get_filtered?filter=FILTER_DATA` is used to achieve this. The REST backend must support this.
- * This method is almost certainly unique to my own systems, so when connecting to most REST backends this
+ * `GET /noun?filter=FILTER_DATA` is used to achieve this. The REST backend must support this.
+ * This method is somewhat unique to my own systems, so when connecting to most REST backends this
  * will likely need to change a bit.
  * 
  * 
@@ -105,7 +95,6 @@ class ErrorREST extends Error
  * I have a lot left to learn about the quirks of REST API's. Implementations differ wildly. As I use these
  * classes more and more outside of my own walled garden, I expect some things will change. Some future features:
  * + Pagination
- * + Bulk update
  * + Better function structure for custom implementation of special get_ methods.
  * + Better consideration for caching. Currently, all GET requests are cachebusted.
  */
@@ -119,10 +108,6 @@ class DHREST extends DHTabular
 	_marked_ids
 	/** @type {Object} A mirror of _data that contains only data that originated from the server. No local changes. */
 	_data_from_server
-	/** @type {Boolean} Whether the bulk_get method is used to fetch multiple ID's */
-	_bulk_get_enabled
-	/** @type {Boolean} Whether the bulk_update method is used to update multiple ID's */
-	_bulk_update_enabled
 	/** @type {Boolean} Whether cachebusting is enabled. If so, all fetch operations will cachebust. */
 	_cache_bust_enabled
 	/** @type {string} The key of the ID for a record in server-returned data */
@@ -136,11 +121,9 @@ class DHREST extends DHTabular
 	 * The api_url can be an absolute URL to another domain, or one relative to the current domain's root
 	 * 
 	 * @param {string} api_url The root path to the REST API routes, e.g. '/api/v2/noun'
-	 * @param {Boolean} bulk_get Whether to get multiple at once with bulk fetching. Default true
-	 * @param {Boolean} bulk_update Whether to update multiple at once with bulk update. Default true
 	 * @param {string} id_key What key in record data represents the ID. Defaults to "id"
 	 */
-	constructor(api_url, bulk_get=true, bulk_update=false, id_key="id")
+	constructor(api_url, id_key="id")
 	{
 		super()
 		// Try to set the URL, either directly or by appending to window location.
@@ -153,8 +136,6 @@ class DHREST extends DHTabular
 		{
 			this.api_url = new URL(api_url, window.location.origin)
 		}
-		this._bulk_get_enabled = bulk_get
-		this._bulk_update_enabled = bulk_update
 		this._cache_bust_enabled = true
 		this._id_key = id_key
 		this.push_conflict_res = PUSH_CONFLICT_RESOLUTIONS.WITH_EXCEPTION
@@ -466,8 +447,7 @@ class DHREST extends DHTabular
 			let altered_url = this._url_for(undefined)
 			if(filter_data)
 			{
-				altered_url = new URL(this._url_for(undefined) + "_get_filtered")
-				altered_url.searchParams.append('filter', btoa(JSON.stringify(filter_data)))
+				altered_url.searchParams.append('filter', encodeURIComponent(JSON.stringify(filter_data)))
 			}
 			let opts = {
 				method: "GET"
@@ -571,105 +551,8 @@ class DHREST extends DHTabular
 	}
 
 	/**
-	 * Fire a bulk get command against the API. This method is more efficient than firing many individual GET
-	 * commands. However, there seems to be no generally accepted format for this. Furthermore, it mostly
-	 * mitigates the advantages of caching.
-	 * 
-	 * Bulk get, on my systems, is achieved by sending a URL parameter along with a GET request to the general
-	 * API URL. The format of this parameter is:
-	 * 
-	 * ```
-	 * "/api/url/object?ids=BASE_64_ENCODED_ID_LIST"
-	 * 
-	 * let BASE_64_ENCODED_ID_LIST = btoa(JSON.stringify(id_list))
-	 * ```
-	 * 
-	 * This has the consequence of enforcing only UTF-8 characters for ID's, which I am Ok with.
-	 * 
-	 * I intend to do some research with this method, in fact, and find whether caching and getting single
-	 * resources can perform better than multi-fetch in the long run. But that relies on discovering a safe
-	 * way to cache resources that might one day change, as they are after all in a database. Hmm...
-	 * 
-	 * @param {Array} ids ID's to get information for.
-	 * 
-	 * @returns {Promise} That resolves with a data_map of id to Object with data for all requested ID's.
-	 */
-	async _get_bulk(ids)
-	{
-		let altered_url = new URL(this._url_for(undefined) + "_get_bulk")
-		altered_url.searchParams.append('ids', btoa(JSON.stringify(ids)))
-		return new Promise((res, rej)=>
-		{
-			if(ids.length == 0)
-			{
-				res({})
-				return
-			}
-
-			let opts = {
-				method: "GET"
-			}
-			if(this._cache_bust_enabled)
-			{
-				opts.cache = "no-store"
-			}
-			fetch(
-				altered_url, opts
-			).then((response)=>
-			{
-				if(response.status == 200)
-				{
-					return response.json()
-				}
-				else
-				{
-					rej(`Update data for <${this.constructor.name}:${ids}> fails with code ${response.status}`)
-				}
-			}).then((data)=>
-			{
-				res(data)
-			})
-		})
-	}
-
-	/**
-	 * Fire a bulk update command against the API. This method is more efficient than firing many individual
-	 * PUT requests, and furthermore does not have any downsides as caching was never an option.
-	 * 
-	 * Bulk put, on my systems, is achieved by sending a dict of the form:
-	 * 
-	 * ```
-	 * {
-	 * 		1: {key: val, key2: val2, ...}
-	 * 		2: {key: val, key2: val2, ...}
-	 * 		...
-	 * 		n: {key: val, key2: val2, ...}
-	 * }
-	 * ```
-	 * 
-	 * With an id-mapped data object for all ID's to update.
-	 * 
-	 * @param {Object} data_map ID-mapped Objects which contain 'data' for classic PUT requests.
-	 * 
-	 * @returns {Promise} A promise that will resolve a similar ID map with whatever was updated.
-	 */
-	async _put_bulk(data_map)
-	{
-		throw("TODO Not yet implemented... need to think about how errors and discrepancies are handled.")
-		return fetch(
-			this._url_for(id),
-			{
-				method: "PUT",
-				body: JSON.stringify(data),
-				headers: JSON_HEADERS,
-			}
-		)
-	}
-
-	/**
 	 * This is an internal helper method which will contact the server to get a new, full
-	 * set of data for every ID included. Depending on instance configuration, this will either do so
-	 * with a bulk operation (GET /api/noun?ids=[1, 2, 3]) or by making many individual GET requests
+	 * set of data for every ID included. This will make many individual GET requests
 	 * (GET /api/noun/1, GET /api/noun/2, ...).
 	 * 
 	 * @param {Array} ids The ID's to fetch.
@@ -678,42 +561,28 @@ class DHREST extends DHTabular
 	 */
 	async _get_many(ids)
 	{
-		if(this._bulk_get_enabled)
+		var all_promises = []
+		ids.forEach((id)=>
 		{
-			return this._get_bulk(ids).then((data_map)=>
+			// Wrap the _put promise with another that sets the data when it returns.
+			let get_and_set = new Promise((res, rej)=>
 			{
-				Object.entries(data_map).forEach(([id, data])=>
+				this._get(id).then((data_returned)=>
 				{
-					this._local_data_set_from_server(id, data)
+					this._local_data_set_from_server(id, data_returned)
+					res()
 				})
 			})
-		}
-		else
-		{
-			var all_promises = []
-			ids.forEach((id)=>
-			{
-				// Wrap the _put promise with another that sets the data when it returns.
-				let get_and_set = new Promise((res, rej)=>
-				{
-					this._get(id).then((data_returned)=>
-					{
-						this._local_data_set_from_server(id, data_returned)
-						res()
-					})
-				})
-				// And add that to the big list
-				all_promises.push(get_and_set)
-			})
-			// Execute all in the 'big list' of promises.
-			return Promise.all(all_promises)
-		}
+			// And add that to the big list
+			all_promises.push(get_and_set)
+		})
+		// Execute all in the 'big list' of promises.
+		return Promise.all(all_promises)
 	}
 
 	/**
 	 * This is an internal helper method which will cause the server to update records for all object data
-	 * in the provided data_map. Depending on instance configuration, this will either use a bulk update
-	 * operation or spawn a great many individual updates.
+	 * in the provided data_map. This will spawn a great many individual updates.
 	 * 
 	 * @param {Object} data_map ID-mapped Objects which contain 'data' for classic PUT requests.
 	 * 
@@ -721,30 +590,23 @@ class DHREST extends DHTabular
 	 */
 	async _put_many(data_map)
 	{
-		if(this._bulk_update_enabled)
+		var all_promises = []
+		Object.entries(data_map).forEach(([id, data])=>
 		{
-			return this._put_bulk(data_map)
-		}
-		else
-		{
-			var all_promises = []
-			Object.entries(data_map).forEach(([id, data])=>
+			// Wrap the _put promise with another that sets the data when it returns.
+			let put_and_set = new Promise((res, rej)=>
 			{
-				// Wrap the _put promise with another that sets the data when it returns.
-				let put_and_set = new Promise((res, rej)=>
+				this._put(id, data).then((data_returned)=>
 				{
-					this._put(id, data).then((data_returned)=>
-					{
-						this._local_data_set_from_server(id, data_returned)
-						res()
-					})
+					this._local_data_set_from_server(id, data_returned)
+					res()
 				})
-				// And add that to the big list
-				all_promises.push(put_and_set)
 			})
-			// Execute all in the 'big list' of promises.
-			return Promise.all(all_promises)
-		}
+			// And add that to the big list
+			all_promises.push(put_and_set)
+		})
+		// Execute all in the 'big list' of promises.
+		return Promise.all(all_promises)
 	}
 	
 	/**
