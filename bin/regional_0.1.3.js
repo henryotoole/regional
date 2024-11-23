@@ -1634,7 +1634,7 @@ var DHREST = class extends DHTabular {
     if (id) {
       return new URL(id, this.api_url + "/");
     } else {
-      return this.api_url;
+      return new URL(this.api_url);
     }
   }
   /**

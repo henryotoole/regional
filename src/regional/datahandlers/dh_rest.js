@@ -304,7 +304,7 @@ class DHREST extends DHTabular
 		}
 		else
 		{
-			return this.api_url
+			return new URL(this.api_url)
 		}
 	}
 
