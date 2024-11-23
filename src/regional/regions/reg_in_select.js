@@ -140,18 +140,20 @@ class RegInSelect extends RegIn
 		super._on_render()
 		
 		this.select.empty()
-		Object.entries(this.settings.options).forEach(([k, v])=>
+		let options = this.settings.options != undefined ? this.settings.options : {}
+		Object.entries(options).forEach(([k, v])=>
 		{
 			let opt = RHElement.wrap(document.createElement('option'))
 			opt.setAttribute('value', k)
 			opt.textContent = v
+			opt.classList.add('ris-opt')
 			this.select.append(opt)
 		})
 		// Handle case where the selected value no longer exists
-		if(this.settings.value != "" && !this.settings.options.hasOwnProperty(this.settings.value))
+		if(this.settings.value != "" && !options.hasOwnProperty(this.settings.value))
 		{
 			// If there is no vlaue, set to empty string.
-			let k = Object.keys(this.settings.options),
+			let k = Object.keys(options),
 				v = k.length > 0 ? k[0] : ""
 			// This will re-call _on_render, unfortunately, but will do so after having set this.settings.value
 			// to the value here, and will miss the above function.

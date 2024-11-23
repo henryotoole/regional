@@ -52,20 +52,6 @@ describe("DataHandler REST", function() {
 				let response = new Response(body, init)
 				return response
 			},
-			"/api/v2/thing_get_filter": {
-				"GET": (fetch_opts, search_terms)=>{
-					
-				}
-			},
-			"/api/v2/thing_get_bulk": {
-				"GET": (fetch_opts, search_terms)=>{
-					// Complex query for bulk get
-					let data_out = {}
-					let ids = JSON.parse(atob(search_terms.get("ids")))
-					ids.forEach((id)=>{data_out[Number(id)] = backend.data[Number(id)]})
-					return backend.responsify_json(data_out)
-				}
-			},
 			"/api/v2/thing": {
 				"GET": (fetch_opts, search_terms)=>{
 					// Simple query for only ID's
@@ -172,17 +158,6 @@ describe("DataHandler REST", function() {
 		})
 	})
 
-	it("can perform bulk GET", function() {
-		return dh._get_bulk([1, 2, 3]).then((data)=>
-		{
-			expect(data).toEqual({
-				1: {"key": "val1"},
-				2: {"key": "val2"},
-				3: {"key": "val3"}
-			})
-		})
-	})
-
 	it("can perform track_all()", function() {
 		return dh.track_all().then(()=>
 		{
@@ -201,19 +176,6 @@ describe("DataHandler REST", function() {
 			expect(dh._data).toEqual({})
 		})
 	})
-
-	// Mothballed for now; I need to further consider the ramifications of mass-put when it comes to
-	// errors, etc.
-	//it("can perform bulk PUT", function() {
-	//	return dh._put_bulk([1, 2, 3]).then((data)=>
-	//	{
-	//		expect(data).toEqual({
-	//			1: {"key": "val1"},
-	//			2: {"key": "val2"},
-	//			3: {"key": "val3"}
-	//		})
-	//	})
-	//})
 
 	it("can perform get_many() in mass-request mode", function() {
 		dh._bulk_get_enabled = true
