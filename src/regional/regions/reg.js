@@ -653,10 +653,10 @@ class Region
 		this._on_activate_pre()
 
 		// Now propagate the change down the stack.
-		for(let x = 0; x < this.subregions.length; x++)
+		Object.values(this.subregions).forEach((subreg)=>
 		{
-			this.subregions[x].activate()
-		}
+			subreg.activate()
+		})
 
 		// Anything after this point will happen AFTER all sub-activations. This is important for anything global,
 		// like focus which should apply only to the top level.
