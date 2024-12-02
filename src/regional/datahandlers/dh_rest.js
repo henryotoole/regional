@@ -436,19 +436,29 @@ class DHREST extends DHTabular
 	 * Record data that is excluded from serialization (for example, user passhash) is not allowed for filtering
 	 * and will trip an error.
 	 * 
+	 * **On Additional Params**
+	 * If a url parameter takes the form `www.domain.com/route?param_key=param_val&...`, then the additional_params
+	 * dict would resemble `{"param_key": "param_val"}`
+	 * 
 	 * @param {Object} filter_data Optional data to filter response by.
+	 * @param {Object} additional_params Optional additional url parameters to send to the API. See above.
 	 * 
 	 * @returns {Promise} That resolves with the list of ID's available.
 	 */
-	async list(filter_data)
+	async list(filter_data, additional_params)
 	{
 		return new Promise((res, rej)=>
 		{
+			// Collapse args into additional_params
+			if(additional_params == undefined) additional_params = {}
+			if(filter_data != undefined) additional_params['filter'] = filter_data
+
 			let altered_url = this._url_for(undefined)
-			if(filter_data)
+			Object.entries(additional_params).forEach(([k, v])=>
 			{
-				altered_url.searchParams.append('filter', encodeURIComponent(JSON.stringify(filter_data)))
-			}
+				altered_url.searchParams.append(k, encodeURIComponent(JSON.stringify(v)))
+			})
+			
 			let opts = {
 				method: "GET"
 			}

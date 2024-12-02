@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.1.5] - 2024-12-02
+
+### Added
+
+- DHREST now can take arbitrary url parameters for the list() function.
+
 ## [0.1.4] - 2024-11-27
 
 ### Fixed
