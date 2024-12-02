@@ -1,4 +1,4 @@
-version := "0.1.4"
+version := "0.1.5"
 
 
 # bundle source into output files in bin
