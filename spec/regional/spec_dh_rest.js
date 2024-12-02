@@ -3,7 +3,7 @@
  * @author Josh Reed
  */
 
-import {DHREST, PUSH_CONFLICT_RESOLUTIONS} from "regional"
+import {DHREST, PUSH_CONFLICT_RESOLUTIONS, ErrorREST} from "regional"
 
 // An extremely rudimentary expression of a RESTFUL backend
 let backend = {}
@@ -52,14 +52,27 @@ describe("DataHandler REST", function() {
 				let response = new Response(body, init)
 				return response
 			},
+			"responsify_text": (http_code, response_text)=>{
+				let body = new Blob([response_text], {type: 'plain/text'})
+				let init = {status: http_code}
+				let response = new Response(body, init)
+				return response
+			},
 			"/api/v2/thing": {
-				"GET": (fetch_opts, search_terms)=>{
+				"GET": (fetch_opts, url_params)=>{
 					// Simple query for only ID's
 					let ids_num = []
 					Object.keys(backend.data).forEach((id_str)=>{ids_num.push(Number(id_str))})
+
+					// Check for a special param, that will trigger an error
+					if(url_params.get('trip_error'))
+					{
+						return backend.responsify_text(400, 'Tripping error on purpose.')
+					}
+
 					return backend.responsify_json(ids_num)
 				},
-				"POST": (fetch_opts, search_terms)=>{
+				"POST": (fetch_opts, url_params)=>{
 					let data = JSON.parse(fetch_opts.body)
 					backend.data[backend.next_id] = data
 					data['id'] = backend.next_id
@@ -68,13 +81,13 @@ describe("DataHandler REST", function() {
 			},
 			"add_id": (id)=>{
 				backend["/api/v2/thing/" + id] = {
-					"GET": (fetch_opts, search_terms)=>{
+					"GET": (fetch_opts, url_params)=>{
 						return backend.responsify_json(backend.data[id])
 					},
-					"POST": (fetch_opts, search_terms)=>{
+					"POST": (fetch_opts, url_params)=>{
 						throw("ILLEGAL")
 					},
-					"PUT": (fetch_opts, search_terms)=>{
+					"PUT": (fetch_opts, url_params)=>{
 						let data = JSON.parse(fetch_opts.body)
 						Object.entries(data).forEach(([k, v])=>{
 							backend.data[id][k] = v
@@ -82,7 +95,7 @@ describe("DataHandler REST", function() {
 						if(backend.disable_put_return) {return backend.responsify_json({})}
 						return backend.responsify_json(backend.data[id])
 					},
-					"DELETE": (fetch_opts, search_terms)=>{
+					"DELETE": (fetch_opts, url_params)=>{
 						delete backend.data[id]
 						delete backend["/api/v2/thing/" + id]
 						return backend.responsify_json({})
@@ -388,6 +401,18 @@ describe("DataHandler REST", function() {
 		}).then((data)=>
 		{
 			expect(backend.last_fetch_opts.cache).toEqual(undefined)
+		})
+	})
+
+	it("raises ErrorREST with correct flags and response text", function() {
+		return dh.list(undefined, {'trip_error': true}).then((ids)=>
+		{
+			throw("Should not reach")
+		}).catch((e)=>
+		{
+			expect(e instanceof ErrorREST).toBe(true)
+			expect(e.data.response_text).toBe("Tripping error on purpose.")
+			expect(e.data.http_code).toBe(400)
 		})
 	})
 })

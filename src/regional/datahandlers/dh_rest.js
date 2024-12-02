@@ -28,14 +28,16 @@ class ErrorREST extends Error
 	 * @param {String} operation An informal, plain english string describing what we were attempting
 	 * @param {String} method The HTTP method verb that was used e.g. GET or PUT
 	 * @param {Number} http_code The response HTTP code e.g. 200, 403
+	 * @param {string} response_text The response text, which will hopefully help explain the issue.
 	 */
-	constructor(operation, method, http_code)
+	constructor(operation, method, http_code, response_text)
 	{
-		super(`Operation '${operation}' fails with code ${http_code}`)
+		super(`Operation '${operation}' fails with code ${http_code} and response text "${response_text}"`)
 		this.data = {
 			operation: operation,
 			method: method,
-			http_code: http_code
+			http_code: http_code,
+			response_text: response_text,
 		}
 	}
 }
@@ -355,6 +357,7 @@ class DHREST extends DHTabular
 	 */
 	async _create(data)
 	{
+		let response
 		return fetch(
 			this._url_for(undefined),
 			{
@@ -362,15 +365,25 @@ class DHREST extends DHTabular
 				body: JSON.stringify(data),
 				headers: JSON_HEADERS,
 			}
-		).then((response)=>{
+		).then((_response)=>{
+			response = _response
 			if(response.status == 200)
 			{
 				return response.json()
 			}
 			else
 			{
+				return response.text()
+			}
+		}).then((payload)=>{
+			if(response.status == 200)
+			{
+				return Promise.resolve(payload)
+			}
+			else
+			{
 				throw new ErrorREST(
-					"Create new", "POST", response.status
+					"Create new", "POST", response.status, payload
 				)
 			}
 		})
@@ -466,23 +479,35 @@ class DHREST extends DHTabular
 			{
 				opts.cache = "no-store"
 			}
+
+
+			let response
 			fetch(
 				altered_url, opts
-			).then((response)=>
+			)
+			.then((_response)=>
 			{
+				response = _response
 				if(response.status == 200)
 				{
 					return response.json()
 				}
 				else
 				{
+					return response.text()
+				}
+			})
+			.then((payload)=>{
+				if(response.status == 200)
+				{
+					res(payload)
+				}
+				else
+				{
 					rej(new ErrorREST(
-						"Fetch list of ID's", "GET", response.status
+						"Fetch list of ID's", "GET", response.status, payload
 					))
 				}
-			}).then((data)=>
-			{
-				res(data)
 			})
 		})
 	}
