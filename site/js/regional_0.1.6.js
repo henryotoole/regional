@@ -1441,7 +1441,7 @@ var DHTabular = class extends DataHandler {
    * @returns {Component}
    */
   comp_get(id) {
-    return Component(id, this);
+    return new Component(id, this);
   }
 };
 
