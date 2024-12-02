@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.1.6] - 2024-12-02
+
+### Changed
+
+- DHTabular now returns a default Component instance, rather than requiring end-use code to implement both a
+  child component class and a child datahandler class.
+
 ## [0.1.5] - 2024-12-02
 
 ### Added

@@ -145,7 +145,6 @@ class DHTabular extends DataHandler
 	}
 
 	/**
-	 * @abstract
 	 * Get a component instance of the relevant type for this DataHandler. Component instances are really
 	 * just containers for code that store both their settings and data back here in the datahandler. Multiple
 	 * instances of a Component for the same ID will refer to the exact same locations in memory.
@@ -153,11 +152,18 @@ class DHTabular extends DataHandler
 	 * This may be called any number of times in any number of places, and all instances of a component for a
 	 * certain ID will behave as if they are, in fact, the same component.
 	 * 
+	 * The default behavior of this function will return a generic Component instance for the indicated record.
+	 * If component-specific functions are desired, a child Component class can be created and this function
+	 * overridden to return it in a child datahandler class.
+	 * 
 	 * @param {*} id The ID to get a component for.
 	 * 
 	 * @returns {Component}
 	 */
-	comp_get(id) {}
+	comp_get(id)
+	{
+		return Component(id, this)
+	}
 }
 
 export {DHTabular}
