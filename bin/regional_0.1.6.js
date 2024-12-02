@@ -1469,13 +1469,15 @@ var ErrorREST = class extends Error {
    * @param {String} operation An informal, plain english string describing what we were attempting
    * @param {String} method The HTTP method verb that was used e.g. GET or PUT
    * @param {Number} http_code The response HTTP code e.g. 200, 403
+   * @param {string} response_text The response text, which will hopefully help explain the issue.
    */
-  constructor(operation, method, http_code) {
-    super(`Operation '${operation}' fails with code ${http_code}`);
+  constructor(operation, method, http_code, response_text) {
+    super(`Operation '${operation}' fails with code ${http_code} and response text "${response_text}"`);
     this.data = {
       operation,
       method,
-      http_code
+      http_code,
+      response_text
     };
   }
 };
@@ -1682,6 +1684,7 @@ var DHREST = class extends DHTabular {
    * @returns {Promise} That will resolve with the returned data as an argument when the new record has been created.
    */
   async _create(data) {
+    let response;
     return fetch(
       this._url_for(void 0),
       {
@@ -1689,14 +1692,22 @@ var DHREST = class extends DHTabular {
         body: JSON.stringify(data),
         headers: JSON_HEADERS
       }
-    ).then((response) => {
+    ).then((_response) => {
+      response = _response;
       if (response.status == 200) {
         return response.json();
+      } else {
+        return response.text();
+      }
+    }).then((payload) => {
+      if (response.status == 200) {
+        return Promise.resolve(payload);
       } else {
         throw new ErrorREST(
           "Create new",
           "POST",
-          response.status
+          response.status,
+          payload
         );
       }
     });
@@ -1774,21 +1785,28 @@ var DHREST = class extends DHTabular {
       if (this._cache_bust_enabled) {
         opts.cache = "no-store";
       }
+      let response;
       fetch(
         altered_url,
         opts
-      ).then((response) => {
+      ).then((_response) => {
+        response = _response;
         if (response.status == 200) {
           return response.json();
+        } else {
+          return response.text();
+        }
+      }).then((payload) => {
+        if (response.status == 200) {
+          res(payload);
         } else {
           rej(new ErrorREST(
             "Fetch list of ID's",
             "GET",
-            response.status
+            response.status,
+            payload
           ));
         }
-      }).then((data) => {
-        res(data);
       });
     });
   }
