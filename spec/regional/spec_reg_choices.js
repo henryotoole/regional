@@ -20,6 +20,8 @@ class RSWTest extends RegionSwitchyard
 	_create_subregions()
 	{
 		this.r_two = new RegTwoChoice().fab().link(this, this.eth_reg_create()).etherealize()
+		// Stop it from getting in the way
+		this.r_two.reg.style.top = '100vw';
 	}
 }
 
