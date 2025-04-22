@@ -701,8 +701,8 @@ class Region
 	deactivate()
 	{
 		//console.log("Deactivating region " + this.id)
-		if(this.active) this.on_deactivate()
-		this.active = false
+		if(this._active) this._on_deactivate()
+		this._active = false
 		for(let x = 0; x < this.subregions.length; x++)
 		{
 			this.subregions[x].deactivate()

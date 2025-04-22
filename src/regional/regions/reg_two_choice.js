@@ -169,7 +169,7 @@ class RegTwoChoice extends Region
 	_on_deactivate()
 	{
 		// Call deny, won't do anything if already called.
-		this.deny()
+		this.choice_deny()
 	}
 }
 

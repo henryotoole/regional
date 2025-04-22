@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## [Unreleased]
 
+## [0.1.7] - 2025-04-22
+
+### Fixed
+- Bug where region _active was not being reset properly when a region deactivates.
+- Minor big with deactivation in region twochoice.
+
 ## [0.1.6] - 2024-12-02
 
 ### Changed
